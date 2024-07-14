@@ -1,6 +1,0 @@
-[submodule "externals/SPIRV-Tools"]
-	path = externals/SPIRV-Tools
-	url = https://github.com/KhronosGroup/SPIRV-Tools.git
-[submodule "externals/SPIRV-Headers"]
-	path = externals/SPIRV-Headers
-	url = https://github.com/KhronosGroup/SPIRV-Headers.git
