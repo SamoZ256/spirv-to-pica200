@@ -17,7 +17,7 @@ pub fn build(b: *std.Build) void {
 
     const generate_headers = b.addExecutable(.{
         .name = "generate-headers",
-        .root_source_file = b.path("src/generate_headers.zig"),
+        .root_source_file = b.path("src/spirv/generate_headers.zig"),
         .target = target,
         .optimize = optimize,
     });

@@ -1,4 +1,5 @@
 const std = @import("std");
+usingnamespace @import("headers.zig");
 
 pub const Header = struct {
     magic: u32,
