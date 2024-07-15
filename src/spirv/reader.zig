@@ -1,5 +1,5 @@
 const std = @import("std");
-usingnamespace @import("headers.zig");
+const headers = @import("headers.zig");
 
 pub const Header = struct {
     magic: u32,
@@ -9,10 +9,12 @@ pub const Header = struct {
     schema: u32,
 };
 
-//pub const Instruction = struct {
-//    opcode: u16,
-//    operands: []const u32,
-//};
+pub const Instruction = struct {
+    opcode: headers.Op,
+    result_type: u32,
+    result: u32,
+    operands: []const u32,
+};
 
 pub const Reader = struct {
     spv: []const u32,
@@ -22,13 +24,11 @@ pub const Reader = struct {
         var self: Reader = undefined;
         self.spv = spv;
         self.word_ptr = 5; // Skip header
-        // HACK
-        std.debug.print("SPIRV: {any}\n", .{spv});
 
         return self;
     }
 
-    pub fn readHeader(self: *Reader) Header {
+    pub fn readHeader(self: *const Reader) Header {
         var header: Header = undefined;
         header.magic = self.spv[0];
         header.version = self.spv[1];
@@ -39,31 +39,44 @@ pub const Reader = struct {
         return header;
     }
 
-    // TODO: uncomment
-    //pub fn readInstruction(self: *const Reader) Instruction {
-    //    var instruction: Instruction = Instruction.init();
+    pub fn readInstruction(self: *Reader) Instruction {
+        var instruction: Instruction = undefined;
 
-    //    const opcode = self.readWord();
-    //    const word_count = (opcode & 0xFFFF0000) >> 16;
-    //    const opcode_enum = opcode & 0xFFFF;
+        const opcode_combined = self.readWord();
+        var word_count = (opcode_combined & 0xFFFF0000) >> 16;
+        instruction.opcode = @enumFromInt(opcode_combined & 0xFFFF);
 
-    //    ;
+        const inst_info = headers.getInstructionInfo(instruction.opcode);
+        word_count -= 1; // Subtract opcode
+        if (inst_info.has_result_type) {
+            instruction.result_type = self.readWord();
+            word_count -= 1; // Subtract result type
+        }
+        if (inst_info.has_result) {
+            instruction.result = self.readWord();
+            word_count -= 1; // Subtract result
+        }
 
-    //    for (0..world_count - 1) |i| {
-    //        const word = self.readWord();
-    //    }
+        instruction.operands = self.readWords(word_count);
 
-    //    return instruction;
-    //}
+        return instruction;
+    }
 
     pub fn end(self: *const Reader) bool {
         return self.word_ptr >= self.spv.len;
     }
 
-    fn readWord(self: *const Reader) u32 {
+    fn readWord(self: *Reader) u32 {
         const word = self.spv[self.word_ptr];
         self.word_ptr += 1;
 
         return word;
+    }
+
+    fn readWords(self: *Reader, count: u32) []const u32 {
+        const words = self.spv[self.word_ptr..self.word_ptr + count];
+        self.word_ptr += count;
+
+        return words;
     }
 };

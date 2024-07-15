@@ -24,13 +24,21 @@ pub fn main() !void {
     for (enums_tree.array().items()) |enum_tree| {
         const name = enum_tree.get("Name").string();
         const ty = enum_tree.get("Type").string();
+        const is_bit = std.mem.eql(u8, ty, "Bit");
         try writer.print("pub const {s} = enum(u32) {{\n", .{name});
         const values_tree = enum_tree.get("Values").object();
+
+        // Store the previous value in case the next one is just an alias
+        var previous_value: i64 = -1;
         for (values_tree.keys()) |key| {
             const value = values_tree.get(key).integer();
+            if (value == previous_value) {
+                continue;
+            }
+            previous_value = value;
             try writer.print("    {s} = @as(u32, ", .{key});
             // TODO: check if this is correct
-            if (std.mem.eql(u8, ty, "Bit")) {
+            if (is_bit) {
                 try writer.print("1 << ", .{});
             }
             try writer.print("{}),\n", .{value});
@@ -50,7 +58,13 @@ pub fn main() !void {
     const instructions_tree = spirv_grammar_tree.get("instructions");
 
     try writer.print("pub fn getInstructionInfo(op: Op) InstructionInfo {{\n    return switch (op) {{\n", .{});
+    var previous_opcode: i64 = -1;
     for (instructions_tree.array().items()) |instruction_tree| {
+        const opcode = instruction_tree.get("opcode").integer();
+        if (opcode == previous_opcode) {
+            continue;
+        }
+        previous_opcode = opcode;
         const opname = instruction_tree.get("opname").string();
         const operands_tree = instruction_tree.object().getOrNull("operands");
         var has_result_type = false;
@@ -65,7 +79,7 @@ pub fn main() !void {
                 }
             }
         }
-        try writer.print("        {s} => .{{ .has_result_type = {}, .has_result = {} }},\n", .{opname, has_result_type, has_result});
+        try writer.print("        .{s} => .{{ .has_result_type = {}, .has_result = {} }},\n", .{opname, has_result_type, has_result});
     }
     try writer.print("    }};\n}}\n", .{});
 
