@@ -22,6 +22,11 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // zig-json
+    const zig_json = b.dependency("zig_json", .{ .target = target, .optimize = optimize });
+
+    generate_headers.root_module.addImport("json", zig_json.module("zig-json"));
+
     const generate = b.addRunArtifact(generate_headers);
 
     const lib = b.addStaticLibrary(.{

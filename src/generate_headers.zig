@@ -1,27 +1,28 @@
 const std = @import("std");
+const json = @import("json");
 
 pub fn main() !void {
     const spirv_spec_data = @embedFile("spirv.json");
 
     // Allocator
-    const gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer gpa.deinit();
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
 
-    var parser = std.json.Parser.init(gpa.allocator(), false);
-    defer parser.deinit();
+    const spirv_spec_tree = try json.parse(spirv_spec_data, allocator);
+    defer spirv_spec_tree.deinit(allocator);
 
-    var tree = try parser.parse(spirv_spec_data);
-    defer tree.deinit();
+    const spv_tree = spirv_spec_tree.get("spv");
+    const enums_tree = spv_tree.get("enum");
 
-    // Access the fields value via .get() method
-    const spv_tree = tree.root.Object.get("spv").?;
-    const enum_tree = spv_tree.get("b").?;
-    for (enum_tree) |enum_node| {
-        const enum_name = enum_node.key;
-        const enum_value = enum_node.value.get("value").?;
-        const enum_description = enum_node.value.get("description").?;
-
-        // Print the enum name, value and description
-        std.debug.print("Enum: {}, Value: {}, Description: {}\n", enum_name, enum_value, enum_description);
+    for (enums_tree.array().items()) |enum_tree| {
+        const name = enum_tree.get("Name").string();
+        const ty = enum_tree.get("Type").string();
+        std.debug.print("Name: {s}, Type: {s}\n", .{name, ty});
+        const values_tree = enum_tree.get("Values").object();
+        for (values_tree.keys()) |key| {
+            const value = values_tree.get(key).integer();
+            std.debug.print("\"{s}\" : {}\n", .{key, value});
+        }
     }
 }
