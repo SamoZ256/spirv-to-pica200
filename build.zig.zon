@@ -15,10 +15,10 @@
     // Once all dependencies are fetched, `zig build` no longer requires
     // internet connectivity.
     .dependencies = .{
-        .spirv_tools = .{
-            .url = "https://github.com/hexops/spirv-tools/archive/4dad52926d917c7e714511af554038e2f7ddfa09.tar.gz",
-            .hash = "1220b3b094e64cb8d084fa5991fcaa63ce98e8327d9f312bbe1c639dcec1f7fd457f",
-        },
+        //.spirv_tools = .{
+        //    .url = "https://github.com/hexops/spirv-tools/archive/4dad52926d917c7e714511af554038e2f7ddfa09.tar.gz",
+        //    .hash = "1220b3b094e64cb8d084fa5991fcaa63ce98e8327d9f312bbe1c639dcec1f7fd457f",
+        //},
     },
 
     // Specifies the set of files and directories that are included in this package.

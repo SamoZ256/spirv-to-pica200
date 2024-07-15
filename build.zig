@@ -37,13 +37,13 @@ pub fn build(b: *std.Build) void {
     });
 
     // SPIRV-Tools
-    const spirv_tools = b.dependency("spirv_tools", .{
-        .target = target,
-        .optimize = optimize,
-    });
+    //const spirv_tools = b.dependency("spirv_tools", .{
+    //    .target = target,
+    //    .optimize = optimize,
+    //});
 
-    exe.root_module.addImport("spirv_tools", spirv_tools.module("spirv_opt"));
-    exe.linkLibrary(spirv_tools.artifact("spirv_tools"));
+    //exe.root_module.addImport("spirv_tools", spirv_tools.module("spirv_opt"));
+    //exe.linkLibrary(spirv_tools.artifact("spirv_tools"));
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
