@@ -37,8 +37,8 @@ const Value = struct {
         return self;
     }
 
-    pub fn load(self: *Value) Value {
-        const result = self;
+    pub fn load(self: Value) Value {
+        var result = self;
         result.ignore_load = true;
 
         return result;
@@ -90,7 +90,17 @@ pub const Builder = struct {
     }
 
     pub fn CreateLabel(_: *Builder, writer: anytype, id: u32) !void {
-        try writer.printLine("label{}", .{id});
+        try writer.printLineScopeIgnored("label{}:", .{id});
+    }
+
+    pub fn CreateConstant(self: *Builder, writer: anytype, result: u32, _: u32, val: u32) !void {
+        // HACK
+        const constant = Constant{ .f = @bitCast(val) };
+
+        var value = Value.init("const0"); // TODO: use the result id for naming
+        value.constant = constant;
+        try self.id_map.put(result, value);
+        try writer.printLine(".constf {s}({}, {}, {}, {})", .{value.getName(self.allocator), constant.f, constant.f, constant.f, constant.f});
     }
 
     pub fn CreateVariable(self: *Builder, writer: anytype, result: u32, _: u32, storage_class: StorageClass) !void {
@@ -114,22 +124,47 @@ pub const Builder = struct {
     }
 
     pub fn CreateLoad(self: *Builder, writer: anytype, result: u32, ptr: u32) !void {
-        const value = self.id_map.get(ptr);
-        if (value.ignore_load) {
-            self.id_map.put(result, value.load());
+        const ptr_v = self.id_map.get(ptr).?;
+        if (ptr_v.ignore_load) {
+            try self.id_map.put(result, ptr_v.load());
             return;
         }
-        self.id_map.put(result, Value.init("r0")); // TODO: query available register
-        writer.printLine("mov {}, {}", .{result, ptr});
+        try self.id_map.put(result, Value.init("r0")); // TODO: query available register
+        try writer.printLine("mov {}, {}", .{result, ptr});
     }
 
-    pub fn CreateCompositeExtract(self: *Builder, _: anytype, result: u32, composite: u32, indices: []const u32) !void {
+    pub fn CreateStore(self: *Builder, writer: anytype, ptr: u32, val: u32) !void {
+        const ptr_v = self.id_map.get(ptr).?;
+        const val_v = self.id_map.get(val).?;
+        try writer.printLine("mov {s}, {s}", .{ptr_v.getName(self.allocator), val_v.getName(self.allocator)});
+    }
+
+    pub fn CreateExtract(self: *Builder, _: anytype, result: u32, composite: u32, indices: []const u32) !void {
         var value = self.id_map.get(composite).?;
-        for (indices) |i| {
-            const index = self.id_map.get(i);
-            if (index) |*ind| {
-                value = value.indexInto(ind);
+        for (indices) |index| {
+            var index_v = Value.init("");
+            index_v.constant = Constant{ .u = index };
+            value = value.indexInto(&index_v);
+        }
+        try self.id_map.put(result, value);
+    }
+
+    pub fn CreateAccessChain(self: *Builder, _: anytype, result: u32, composite: u32, indices: []const u32) !void {
+        var value = self.id_map.get(composite).?;
+        for (indices) |index| {
+            const index_v = self.id_map.get(index);
+            if (index_v) |*ind_v| {
+                value = value.indexInto(ind_v);
             }
+        }
+        try self.id_map.put(result, value);
+    }
+
+    pub fn CreateConstruct(self: *Builder, writer: anytype, result: u32, _: u32, components: []const u32) !void {
+        var value = Value.init("r0"); // TODO: query available register
+        for (0..components.len) |i| {
+            const component = self.id_map.get(components[i]).?;
+            try writer.printLine("mov {s}.{c}, {s}", .{value.getName(self.allocator), "xyzw"[i], component.getName(self.allocator)});
         }
         try self.id_map.put(result, value);
     }

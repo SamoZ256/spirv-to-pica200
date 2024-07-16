@@ -7,6 +7,7 @@ fn compileToPICA200(data: []const u8) !void {
     const spv = @as([*]const u32, @ptrCast(@alignCast(data.ptr)))[0..spv_len];
 
     var translatr = translator.Translator.init(testing.test_allocator, spv);
+    defer translatr.deinit();
 
     try translatr.translate(std.io.getStdOut().writer());
 }

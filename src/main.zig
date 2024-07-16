@@ -13,6 +13,7 @@ pub fn main() !void {
     const allocator = gpa.allocator();
 
     var translatr = translator.Translator.init(allocator, spv);
+    defer translatr.deinit();
 
     try translatr.translate(std.io.getStdOut().writer());
 }

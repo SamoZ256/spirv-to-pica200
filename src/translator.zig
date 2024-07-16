@@ -33,9 +33,10 @@ fn Writer(w_type: type) type {
         }
 
         pub fn printLineScopeIgnored(self: *@This(), comptime fmt: []const u8, args: anytype) !void {
-            defer self.in_scope = self.in_scope;
+            const was_in_scope = self.in_scope;
             self.in_scope = false;
             try self.printLine(fmt, args);
+            self.in_scope = was_in_scope;
         }
 
         pub fn enterScope(self: *@This(), comptime str: []const u8) !void {
@@ -62,7 +63,10 @@ pub const Translator = struct {
         return self;
     }
 
-    // TODO: use the writer
+    pub fn deinit(self: *Translator) void {
+        self.pica200_builder.deinit();
+    }
+
     pub fn translate(self: *Translator, w: anytype) !void {
         var writer = Writer(@TypeOf(w)).init(w);
 
@@ -74,15 +78,19 @@ pub const Translator = struct {
         }
     }
 
-    // TODO: use the writer
     fn translateInstruction(self: *Translator, writer: anytype, instruction: *const spirv.reader.Instruction) !void {
         try switch (instruction.opcode) {
             .OpNop => self.pica200_builder.CreateNop(writer),
             .OpFunction => self.pica200_builder.CreateFunction(writer),
             .OpFunctionEnd => self.pica200_builder.CreateFunctionEnd(writer),
             .OpLabel => self.pica200_builder.CreateLabel(writer, instruction.result_id),
+            .OpConstant => self.pica200_builder.CreateConstant(writer, instruction.result_id, instruction.result_type_id, instruction.operands[0]),
             .OpVariable => self.pica200_builder.CreateVariable(writer, instruction.result_id, instruction.result_type_id, toPica200StorageClass(@enumFromInt(instruction.operands[0]))),
-            .OpCompositeExtract => self.pica200_builder.CreateCompositeExtract(writer, instruction.result_id, instruction.operands[0], instruction.operands[1..(instruction.operands.len - 1)]),
+            .OpLoad => self.pica200_builder.CreateLoad(writer, instruction.result_id, instruction.operands[0]),
+            .OpStore => self.pica200_builder.CreateStore(writer, instruction.operands[0], instruction.operands[1]),
+            .OpCompositeExtract => self.pica200_builder.CreateExtract(writer, instruction.result_id, instruction.operands[0], instruction.operands[1..(instruction.operands.len - 1)]),
+            .OpAccessChain => self.pica200_builder.CreateAccessChain(writer, instruction.result_id, instruction.operands[0], instruction.operands[1..(instruction.operands.len - 1)]),
+            .OpCompositeConstruct => self.pica200_builder.CreateConstruct(writer, instruction.result_id, instruction.result_type_id, instruction.operands),
             else => try writer.printLine("{}", .{instruction.opcode}),
         };
     }
