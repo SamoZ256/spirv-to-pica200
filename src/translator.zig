@@ -11,6 +11,19 @@ fn toPica200StorageClass(storage_class: spirv.headers.StorageClass) pica200.buil
     };
 }
 
+fn toPica200Decoration(decoration: []const u32) pica200.builder.Decoration {
+    return switch (@as(spirv.headers.Decoration, @enumFromInt(decoration[0]))) {
+        .Location => .{ .Location = decoration[1] },
+        .BuiltIn => blk: {
+            break :blk switch (@as(spirv.headers.BuiltIn, @enumFromInt(decoration[1]))) {
+                .Position => .{ .Position = {} },
+                else => |b| std.debug.panic("Unsupported built-in: {}\n", .{b}),
+            };
+        },
+        else => |d| std.debug.panic("Unsupported decoration: {}\n", .{d}),
+    };
+}
+
 fn Writer(w_type: type) type {
     return struct {
         w: w_type,
@@ -79,6 +92,9 @@ pub const Translator = struct {
 
     fn translateInstruction(self: *Translator, writer: anytype, instruction: *const spirv.reader.Instruction) !void {
         try switch (instruction.opcode) {
+            // Decorations
+            .OpDecorate => self.pica200_builder.createDecoration(instruction.operands[0], toPica200Decoration(instruction.operands[1..])),
+            .OpMemberDecorate => self.pica200_builder.createMemberDecoration(instruction.operands[0], instruction.operands[1], toPica200Decoration(instruction.operands[2..])),
             // Types
             .OpTypeVoid => self.pica200_builder.createVoidType(instruction.result_id),
             .OpTypeBool => self.pica200_builder.createBoolType(instruction.result_id),
@@ -110,9 +126,13 @@ pub const Translator = struct {
             .OpEntryPoint => {},
             .OpSource => {},
             .OpReturn => {},
+            .OpTypeFunction => {},
             // TODO: use these for debugging
             .OpName => {},
             .OpMemberName => {},
+            // Invalid
+            .OpFunctionCall => std.debug.panic("OpFunctionCall is not supported\n", .{}),
+            .OpFunctionParameter => std.debug.panic("OpFunctionParameter is not supported\n", .{}),
             else => try writer.printLine("{}", .{instruction.opcode}),
         };
     }
