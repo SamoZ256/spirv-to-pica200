@@ -14,6 +14,14 @@ const Constant = union {
     b: bool,
 };
 
+fn getComponentStr(component: anytype) u8 {
+    if (component == -1) {
+        return ' ';
+    }
+
+    return "xyzw"[@intCast(component)];
+}
+
 const Value = struct {
     name: []const u8,
     component_indices: [4]i8,
@@ -45,6 +53,7 @@ const Value = struct {
     }
 
     pub fn indexInto(self: Value, index: *const Value) Value {
+        std.debug.print("INDEX INTO: {s}\n", .{self.name});
         var result = self;
         if (self.array_size != 0 and self.array_index == null) {
             result.array_index = index;
@@ -55,19 +64,33 @@ const Value = struct {
         return result;
     }
 
-    pub fn getName(self: Value, _: std.mem.Allocator) []const u8 {
-        return self.name; // TODO: take array index and component indices into account
+    pub fn getName(self: Value, allocator: std.mem.Allocator) ![]const u8 {
+        var array_index_str: []const u8 = "";
+        if (self.array_index) |array_ind| {
+            array_index_str = try std.fmt.allocPrint(allocator, "[{}]", .{array_ind.constant.?.u});
+        }
+        var component_indices_str: []const u8 = "";
+        if (self.component_indices[0] != 0 or self.component_indices[1] != 1 or self.component_indices[2] != 2 or self.component_indices[3] != 3) {
+            component_indices_str = try std.fmt.allocPrint(allocator, ".{c}{c}{c}{c}", .{getComponentStr(self.component_indices[0]), getComponentStr(self.component_indices[1]), getComponentStr(self.component_indices[2]), getComponentStr(self.component_indices[3])});
+        }
+
+        return try std.fmt.allocPrint(allocator, "{s}{s}{s}", .{self.name, array_index_str, component_indices_str});
     }
 };
 
 pub const Builder = struct {
     allocator: std.mem.Allocator,
     id_map: std.AutoHashMap(u32, Value),
+    //decoration_map: std.AutoHashMap(u32, []const u8),
+
+    // HACK
+    register_counter: u32,
 
     pub fn init(allocator: std.mem.Allocator) Builder {
         var self: Builder = undefined;
         self.allocator = allocator;
         self.id_map = std.AutoHashMap(u32, Value).init(self.allocator);
+        self.register_counter = 0;
 
         return self;
     }
@@ -76,39 +99,43 @@ pub const Builder = struct {
         self.id_map.deinit();
     }
 
-    // Instructions
-    pub fn CreateNop(_: *Builder, writer: anytype) !void {
-        try writer.printLine("nop", .{});
+    // Utility
+    fn getAvailableRegisterName(self: *Builder) ![]const u8 {
+        const result = self.register_counter;
+        self.register_counter += 1;
+
+        return std.fmt.allocPrint(self.allocator, "r{}", .{result});
     }
 
-    pub fn CreateFunction(_: *Builder, writer: anytype) !void {
+    // Instructions
+    pub fn createMain(_: *Builder, writer: anytype) !void {
         try writer.enterScope(".proc main");
     }
 
-    pub fn CreateFunctionEnd(_: *Builder, writer: anytype) !void {
+    pub fn createEnd(_: *Builder, writer: anytype) !void {
         try writer.leaveScope(".end");
     }
 
-    pub fn CreateLabel(_: *Builder, writer: anytype, id: u32) !void {
+    pub fn createLabel(_: *Builder, writer: anytype, id: u32) !void {
         try writer.printLineScopeIgnored("label{}:", .{id});
     }
 
-    pub fn CreateConstant(self: *Builder, writer: anytype, result: u32, _: u32, val: u32) !void {
+    pub fn createConstant(self: *Builder, writer: anytype, result: u32, _: u32, val: u32) !void {
         // HACK
         const constant = Constant{ .f = @bitCast(val) };
 
         var value = Value.init("const0"); // TODO: use the result id for naming
         value.constant = constant;
         try self.id_map.put(result, value);
-        try writer.printLine(".constf {s}({}, {}, {}, {})", .{value.getName(self.allocator), constant.f, constant.f, constant.f, constant.f});
+        try writer.printLine(".constf {s}({}, {}, {}, {})", .{try value.getName(self.allocator), constant.f, constant.f, constant.f, constant.f});
     }
 
-    pub fn CreateVariable(self: *Builder, writer: anytype, result: u32, _: u32, storage_class: StorageClass) !void {
+    pub fn createVariable(self: *Builder, writer: anytype, result: u32, _: u32, storage_class: StorageClass) !void {
         var name: []const u8 = undefined;
         switch (storage_class) {
             .Input => name = "v0", // TODO: get the input index
             .Uniform => name = "uniform", // TODO: get the uniform index
-            else => name = "r0", // TODO: query available register
+            else => name = try self.getAvailableRegisterName(),
         }
 
         var value = Value.init(name);
@@ -118,28 +145,33 @@ pub const Builder = struct {
         // TODO: set component indices and array size
         try self.id_map.put(result, value);
         switch (storage_class) {
-            .Uniform => try writer.printLine(".fvec {s}", .{value.getName(self.allocator)}),
+            .Uniform => try writer.printLine(".fvec {s}", .{try value.getName(self.allocator)}),
             else => {},
         }
     }
 
-    pub fn CreateLoad(self: *Builder, writer: anytype, result: u32, ptr: u32) !void {
+    pub fn createNop(_: *Builder, writer: anytype) !void {
+        try writer.printLine("nop", .{});
+    }
+
+    pub fn createLoad(self: *Builder, writer: anytype, result: u32, ptr: u32) !void {
         const ptr_v = self.id_map.get(ptr).?;
         if (ptr_v.ignore_load) {
             try self.id_map.put(result, ptr_v.load());
             return;
         }
-        try self.id_map.put(result, Value.init("r0")); // TODO: query available register
+        try self.id_map.put(result, Value.init(try self.getAvailableRegisterName()));
         try writer.printLine("mov {}, {}", .{result, ptr});
     }
 
-    pub fn CreateStore(self: *Builder, writer: anytype, ptr: u32, val: u32) !void {
+    pub fn createStore(self: *Builder, writer: anytype, ptr: u32, val: u32) !void {
         const ptr_v = self.id_map.get(ptr).?;
         const val_v = self.id_map.get(val).?;
-        try writer.printLine("mov {s}, {s}", .{ptr_v.getName(self.allocator), val_v.getName(self.allocator)});
+        try writer.printLine("mov {s}, {s}", .{try ptr_v.getName(self.allocator), try val_v.getName(self.allocator)});
     }
 
-    pub fn CreateExtract(self: *Builder, _: anytype, result: u32, composite: u32, indices: []const u32) !void {
+    pub fn createExtract(self: *Builder, _: anytype, result: u32, composite: u32, indices: []const u32) !void {
+        std.debug.print("INDICES COUNT: {}, {}, {}\n", .{indices.len, result, composite});
         var value = self.id_map.get(composite).?;
         for (indices) |index| {
             var index_v = Value.init("");
@@ -149,7 +181,7 @@ pub const Builder = struct {
         try self.id_map.put(result, value);
     }
 
-    pub fn CreateAccessChain(self: *Builder, _: anytype, result: u32, composite: u32, indices: []const u32) !void {
+    pub fn createAccessChain(self: *Builder, _: anytype, result: u32, composite: u32, indices: []const u32) !void {
         var value = self.id_map.get(composite).?;
         for (indices) |index| {
             const index_v = self.id_map.get(index);
@@ -160,12 +192,30 @@ pub const Builder = struct {
         try self.id_map.put(result, value);
     }
 
-    pub fn CreateConstruct(self: *Builder, writer: anytype, result: u32, _: u32, components: []const u32) !void {
-        var value = Value.init("r0"); // TODO: query available register
+    pub fn createConstruct(self: *Builder, writer: anytype, result: u32, _: u32, components: []const u32) !void {
+        var value = Value.init(try self.getAvailableRegisterName());
         for (0..components.len) |i| {
             const component = self.id_map.get(components[i]).?;
-            try writer.printLine("mov {s}.{c}, {s}", .{value.getName(self.allocator), "xyzw"[i], component.getName(self.allocator)});
+            try writer.printLine("mov {s}.{c}, {s}", .{try value.getName(self.allocator), getComponentStr(i), try component.getName(self.allocator)});
         }
         try self.id_map.put(result, value);
+    }
+
+    pub fn createAdd(self: *Builder, writer: anytype, result: u32, _: u32, lhs: u32, rhs: u32) !void {
+        const lhs_v = self.id_map.get(lhs).?;
+        const rhs_v = self.id_map.get(rhs).?;
+        const value = Value.init(try self.getAvailableRegisterName());
+        try self.id_map.put(result, value);
+        // TODO: check how many components the vector has
+        try writer.printLine("add {s}, {s}, {s}", .{try value.getName(self.allocator), try lhs_v.getName(self.allocator), try rhs_v.getName(self.allocator)});
+    }
+
+    pub fn createVectorTimesScalar(self: *Builder, writer: anytype, result: u32, _: u32, vec: u32, scalar: u32) !void {
+        const vec_v = self.id_map.get(vec).?;
+        const scalar_v = self.id_map.get(scalar).?;
+        const value = Value.init(try self.getAvailableRegisterName());
+        try self.id_map.put(result, value);
+        // TODO: check how many components the vector has
+        try writer.printLine("mul {s}, {s}, {s}.xxxx", .{try value.getName(self.allocator), try vec_v.getName(self.allocator), try scalar_v.getName(self.allocator)});
     }
 };

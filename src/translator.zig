@@ -80,17 +80,29 @@ pub const Translator = struct {
 
     fn translateInstruction(self: *Translator, writer: anytype, instruction: *const spirv.reader.Instruction) !void {
         try switch (instruction.opcode) {
-            .OpNop => self.pica200_builder.CreateNop(writer),
-            .OpFunction => self.pica200_builder.CreateFunction(writer),
-            .OpFunctionEnd => self.pica200_builder.CreateFunctionEnd(writer),
-            .OpLabel => self.pica200_builder.CreateLabel(writer, instruction.result_id),
-            .OpConstant => self.pica200_builder.CreateConstant(writer, instruction.result_id, instruction.result_type_id, instruction.operands[0]),
-            .OpVariable => self.pica200_builder.CreateVariable(writer, instruction.result_id, instruction.result_type_id, toPica200StorageClass(@enumFromInt(instruction.operands[0]))),
-            .OpLoad => self.pica200_builder.CreateLoad(writer, instruction.result_id, instruction.operands[0]),
-            .OpStore => self.pica200_builder.CreateStore(writer, instruction.operands[0], instruction.operands[1]),
-            .OpCompositeExtract => self.pica200_builder.CreateExtract(writer, instruction.result_id, instruction.operands[0], instruction.operands[1..(instruction.operands.len - 1)]),
-            .OpAccessChain => self.pica200_builder.CreateAccessChain(writer, instruction.result_id, instruction.operands[0], instruction.operands[1..(instruction.operands.len - 1)]),
-            .OpCompositeConstruct => self.pica200_builder.CreateConstruct(writer, instruction.result_id, instruction.result_type_id, instruction.operands),
+            .OpNop => self.pica200_builder.createNop(writer),
+            .OpFunction => self.pica200_builder.createMain(writer),
+            .OpFunctionEnd => self.pica200_builder.createEnd(writer),
+            .OpLabel => self.pica200_builder.createLabel(writer, instruction.result_id),
+            .OpConstant => self.pica200_builder.createConstant(writer, instruction.result_id, instruction.result_type_id, instruction.operands[0]),
+            .OpVariable => self.pica200_builder.createVariable(writer, instruction.result_id, instruction.result_type_id, toPica200StorageClass(@enumFromInt(instruction.operands[0]))),
+            .OpLoad => self.pica200_builder.createLoad(writer, instruction.result_id, instruction.operands[0]),
+            .OpStore => self.pica200_builder.createStore(writer, instruction.operands[0], instruction.operands[1]),
+            .OpCompositeExtract => self.pica200_builder.createExtract(writer, instruction.result_id, instruction.operands[0], instruction.operands[1..(instruction.operands.len - 1)]),
+            .OpAccessChain => self.pica200_builder.createAccessChain(writer, instruction.result_id, instruction.operands[0], instruction.operands[1..(instruction.operands.len - 1)]),
+            .OpCompositeConstruct => self.pica200_builder.createConstruct(writer, instruction.result_id, instruction.result_type_id, instruction.operands),
+            .OpFAdd => self.pica200_builder.createAdd(writer, instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1]),
+            .OpVectorTimesScalar => self.pica200_builder.createVectorTimesScalar(writer, instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1]),
+            // Ignored
+            .OpCapability => {},
+            .OpExtInstImport => {},
+            .OpMemoryModel => {},
+            .OpEntryPoint => {},
+            .OpSource => {},
+            .OpReturn => {},
+            // TODO: use these for debugging
+            .OpName => {},
+            .OpMemberName => {},
             else => try writer.printLine("{}", .{instruction.opcode}),
         };
     }
