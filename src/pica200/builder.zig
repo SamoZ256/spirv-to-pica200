@@ -10,11 +10,13 @@ pub const StorageClass = enum {
 };
 
 pub const DecorationType = enum {
+    None,
     Location,
     Position,
 };
 
 pub const Decoration = union(DecorationType) {
+    None: void,
     Location: u32,
     Position: void,
 };
@@ -109,14 +111,16 @@ const Type = union(TypeId) {
 };
 
 const Value = struct {
+    id: u32,
     name: []const u8,
     register_index: u32,
     ty: Type, // HACK: this should be *const Type
     component_indices: [4]i8,
     constant: ?Constant,
 
-    pub fn init(name: []const u8, register_index: u32, ty: *const Type) Value {
+    pub fn init(id: u32, name: []const u8, register_index: u32, ty: *const Type) Value {
         var self: Value = undefined;
+        self.id = id;
         self.name = name;
         self.register_index = register_index;
         self.ty = ty.*;
@@ -129,7 +133,7 @@ const Value = struct {
         return self;
     }
 
-    pub fn indexInto(self: *const Value, allocator: std.mem.Allocator, index_v: *const Value) !Value {
+    pub fn indexInto(self: *const Value, builder: *Builder, allocator: std.mem.Allocator, index_v: *const Value) !Value {
         var result = self.*;
         switch (self.ty) {
             .Array => |array_type| {
@@ -138,8 +142,15 @@ const Value = struct {
             },
             .Struct => |struct_type| {
                 const index = index_v.constant.?.toIndex();
+                result.id = self.id | (index << MEMBER_INDEX_SHIFT);
                 result.ty = struct_type.member_types[index].*;
-                result.register_index += index;
+
+                const decoration_props = builder.decoration_map.get(result.id);
+                if (decoration_props) |d| {
+                    result.register_index = d.location;
+                } else {
+                    result.register_index += index;
+                }
             },
             else => {
                 result.component_indices[0] = result.component_indices[index_v.constant.?.toIndex()];
@@ -211,6 +222,7 @@ pub const Builder = struct {
         switch (decoration) {
             .Location => |location| decoration_props.value_ptr.location = location,
             .Position => decoration_props.value_ptr.position = true,
+            else => {},
         }
     }
 
@@ -290,7 +302,7 @@ pub const Builder = struct {
             else => std.debug.panic("Unsupported constant type\n", .{}),
         };
 
-        var value = Value.init("const", result, type_v); // TODO: use the result id for naming
+        var value = Value.init(result, "const", result, type_v); // TODO: use the result id for naming
         value.constant = constant;
         try self.id_map.put(result, value);
 
@@ -304,20 +316,26 @@ pub const Builder = struct {
     pub fn createVariable(self: *Builder, writer: anytype, result: u32, ty: u32, storage_class: StorageClass) !void {
         const type_v = &self.type_map.get(ty).?;
 
+        const decoration_props = self.decoration_map.get(result);
+        var location: u32 = 0;
+        if (decoration_props) |d| {
+            location = d.location;
+        }
+
         var name: []const u8 = undefined;
         var register_index: u32 = undefined;
         switch (storage_class) {
             .Input => {
                 name = "v";
-                register_index = 0; // TODO: get the input index
+                register_index = location;
             },
             .Output => {
                 name = "o";
-                register_index = 0; // TODO: get the output index
+                register_index = location;
             },
             .Uniform => {
                 name = "uniform";
-                register_index = 0; // TODO: get the uniform index
+                register_index = location;
             },
             else => {
                 name = "r";
@@ -325,8 +343,7 @@ pub const Builder = struct {
             },
         }
 
-        var value = Value.init(name, register_index, type_v);
-        // TODO: set component indices and array size
+        var value = Value.init(result, name, register_index, type_v);
         try self.id_map.put(result, value);
         switch (storage_class) {
             .Uniform => try writer.printLine(".fvec {s}", .{try self.getValueName(&value)}),
@@ -352,9 +369,9 @@ pub const Builder = struct {
     pub fn createExtract(self: *Builder, _: anytype, result: u32, composite: u32, indices: []const u32) !void {
         var value = self.id_map.get(composite).?;
         for (indices) |index| {
-            var index_v = Value.init("INVALID", 0, &Type{ .Int = .{ .is_signed = false } });
+            var index_v = Value.init(0, "INVALID", 0, &Type{ .Int = .{ .is_signed = false } });
             index_v.constant = Constant{ .Uint = index };
-            value = try value.indexInto(self.allocator.allocator(), &index_v);
+            value = try value.indexInto(self, self.allocator.allocator(), &index_v);
         }
         try self.id_map.put(result, value);
     }
@@ -364,7 +381,7 @@ pub const Builder = struct {
         for (indices) |index| {
             const index_v = self.id_map.get(index);
             if (index_v) |*ind_v| {
-                value = try value.indexInto(self.allocator.allocator(), ind_v);
+                value = try value.indexInto(self, self.allocator.allocator(), ind_v);
             }
         }
         try self.id_map.put(result, value);
@@ -373,7 +390,7 @@ pub const Builder = struct {
     pub fn createConstruct(self: *Builder, writer: anytype, result: u32, ty: u32, components: []const u32) !void {
         const type_v = &self.type_map.get(ty).?;
 
-        const value = Value.init("r", self.getAvailableRegister(type_v.getRegisterCount()), type_v);
+        const value = Value.init(result, "r", self.getAvailableRegister(type_v.getRegisterCount()), type_v);
         for (0..components.len) |i| {
             const component = self.id_map.get(components[i]).?;
             try writer.printLine("mov {s}.{c}, {s}", .{try self.getValueName(&value), getComponentStr(i), try self.getValueName(&component)});
@@ -386,7 +403,7 @@ pub const Builder = struct {
 
         const lhs_v = self.id_map.get(lhs).?;
         const rhs_v = self.id_map.get(rhs).?;
-        const value = Value.init("r", self.getAvailableRegister(type_v.getRegisterCount()), type_v);
+        const value = Value.init(result, "r", self.getAvailableRegister(type_v.getRegisterCount()), type_v);
         try self.id_map.put(result, value);
         // TODO: check how many components the vector has
         try writer.printLine("add {s}, {s}, {s}", .{try self.getValueName(&value), try self.getValueName(&lhs_v), try self.getValueName(&rhs_v)});
@@ -397,7 +414,7 @@ pub const Builder = struct {
 
         const vec_v = self.id_map.get(vec).?;
         const scalar_v = self.id_map.get(scalar).?;
-        const value = Value.init("r", self.getAvailableRegister(type_v.getRegisterCount()), type_v);
+        const value = Value.init(result, "r", self.getAvailableRegister(type_v.getRegisterCount()), type_v);
         try self.id_map.put(result, value);
         // TODO: check how many components the vector has
         try writer.printLine("mul {s}, {s}, {s}.xxxx", .{try self.getValueName(&value), try self.getValueName(&vec_v), try self.getValueName(&scalar_v)});

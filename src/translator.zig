@@ -17,10 +17,10 @@ fn toPica200Decoration(decoration: []const u32) pica200.builder.Decoration {
         .BuiltIn => blk: {
             break :blk switch (@as(spirv.headers.BuiltIn, @enumFromInt(decoration[1]))) {
                 .Position => .{ .Position = {} },
-                else => |b| std.debug.panic("Unsupported built-in: {}\n", .{b}),
+                else => .{ .None = {} },
             };
         },
-        else => |d| std.debug.panic("Unsupported decoration: {}\n", .{d}),
+        else => .{ .None = {} },
     };
 }
 
