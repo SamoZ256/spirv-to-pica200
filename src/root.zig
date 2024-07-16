@@ -13,7 +13,6 @@ fn compileToPICA200(data: []const u8) !void {
 }
 
 test "simple shader" {
-    std.debug.print("Begin\n", .{});
     const data = @embedFile("test_shaders/simple.spv");
     try compileToPICA200(data);
 }

@@ -2,7 +2,6 @@ const std = @import("std");
 const translator = @import("translator.zig");
 
 pub fn main() !void {
-    std.debug.print("Begin\n", .{});
     const data = @embedFile("test_shaders/simple.spv");
 
     const spv_len = data.len / @sizeOf(u32) * @sizeOf(u8);

@@ -70,8 +70,7 @@ pub const Translator = struct {
     pub fn translate(self: *Translator, w: anytype) !void {
         var writer = Writer(@TypeOf(w)).init(w);
 
-        const header = self.spirv_reader.readHeader();
-        try writer.printLine("SPIR-V version: {}", .{header.version});
+        _ = self.spirv_reader.readHeader();
         while (!self.spirv_reader.end()) {
             const instruction = self.spirv_reader.readInstruction();
             try self.translateInstruction(&writer, &instruction);
@@ -89,6 +88,7 @@ pub const Translator = struct {
             .OpTypeMatrix => self.pica200_builder.createMatrixType(instruction.result_id, instruction.operands[0], instruction.operands[1]),
             .OpTypeArray => self.pica200_builder.createArrayType(instruction.result_id, instruction.operands[0], instruction.operands[1]),
             .OpTypeStruct => self.pica200_builder.createStructType(instruction.result_id, instruction.operands),
+            .OpTypePointer => self.pica200_builder.createPointerType(instruction.result_id, instruction.operands[1]),
             // Instructions
             .OpNop => self.pica200_builder.createNop(writer),
             .OpFunction => self.pica200_builder.createMain(writer),
