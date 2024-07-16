@@ -11,8 +11,8 @@ pub const Header = struct {
 
 pub const Instruction = struct {
     opcode: headers.Op,
-    result_type: u32,
-    result: u32,
+    result_type_id: u32,
+    result_id: u32,
     operands: []const u32,
 };
 
@@ -49,11 +49,11 @@ pub const Reader = struct {
         const inst_info = headers.getInstructionInfo(instruction.opcode);
         word_count -= 1; // Subtract opcode
         if (inst_info.has_result_type) {
-            instruction.result_type = self.readWord();
+            instruction.result_type_id = self.readWord();
             word_count -= 1; // Subtract result type
         }
         if (inst_info.has_result) {
-            instruction.result = self.readWord();
+            instruction.result_id = self.readWord();
             word_count -= 1; // Subtract result
         }
 

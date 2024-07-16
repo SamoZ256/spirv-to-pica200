@@ -61,18 +61,19 @@ pub const Translator = struct {
         try writer.printLine("SPIR-V version: {}", .{header.version});
         while (!self.spirv_reader.end()) {
             const instruction = self.spirv_reader.readInstruction();
-            try writer.printLine("Instruction: {}", .{instruction.opcode});
             try self.translateInstruction(&writer, &instruction);
         }
     }
 
     // TODO: use the writer
-    fn translateInstruction(_: *Translator, writer: anytype, instruction: *const spirv.reader.Instruction) !void {
+    fn translateInstruction(self: *Translator, writer: anytype, instruction: *const spirv.reader.Instruction) !void {
         try switch (instruction.opcode) {
-            .OpNop => writer.printLine("nop", .{}),
-            .OpFunction => writer.enterScope(".proc main"),
-            .OpFunctionEnd => writer.leaveScope(".end"),
-            else => {},
+            .OpNop => self.builder.CreateNop(),
+            .OpFunction => self.builder.CreateFunction(),
+            .OpFunctionEnd => self.builder.CreateFunctionEnd(),
+            .OpLabel => self.builder.CreateLabel(instruction.result_id),
+            .OpCompositeExtract => self.builder.CreateCompositeExtract(instruction.result_id, instruction.operands[0], instruction.operands[1..(instruction.operands.len - 1)]),
+            else => try writer.printLine("{}", .{instruction.opcode}),
         };
     }
 };
