@@ -20,7 +20,7 @@ const Constant = union(ScalarType) {
     Uint: u32,
     Float: f32,
 
-    pub fn toIndex(self: Constant) usize {
+    pub fn toIndex(self: Constant) u32 {
         return switch (self) {
             .Int => |i| @intCast(i),
             .Uint => |u| u,
@@ -77,14 +77,16 @@ const Type = union(TypeId) {
 
 const Value = struct {
     name: []const u8,
-    ty: *const Type,
+    register_index: u32,
+    ty: Type, // HACK: this should be *const Type
     component_indices: [4]i8,
     constant: ?Constant,
 
-    pub fn init(name: []const u8, ty: *const Type) Value {
+    pub fn init(name: []const u8, register_index: u32, ty: *const Type) Value {
         var self: Value = undefined;
         self.name = name;
-        self.ty = ty;
+        self.register_index = register_index;
+        self.ty = ty.*;
         self.component_indices[0] = 0;
         self.component_indices[1] = 1;
         self.component_indices[2] = 2;
@@ -94,20 +96,23 @@ const Value = struct {
         return self;
     }
 
-    pub fn indexInto(self: *const Value, allocator: std.mem.Allocator, index: *const Value) !Value {
+    pub fn indexInto(self: *const Value, allocator: std.mem.Allocator, index_v: *const Value) !Value {
         var result = self.*;
-        switch (self.ty.*) {
+        switch (self.ty) {
             .Array => |array_type| {
-                result.ty = array_type.element_type;
-                result.name = try std.fmt.allocPrint(allocator, "{s}[{}]", .{self.name, index.constant.?.toIndex()});
+                result.ty = array_type.element_type.*;
+                result.name = try std.fmt.allocPrint(allocator, "{s}[{}]", .{self.name, index_v.constant.?.toIndex()});
             },
-            .Struct => |_| std.debug.panic("STRUCT!!!\n", .{}),
-            else => blk: {
-                result.component_indices[0] = result.component_indices[index.constant.?.toIndex()];
+            .Struct => |struct_type| {
+                const index = index_v.constant.?.toIndex();
+                result.ty = struct_type.member_types[index].*;
+                result.register_index += index;
+            },
+            else => {
+                result.component_indices[0] = result.component_indices[index_v.constant.?.toIndex()];
                 result.component_indices[1] = -1;
                 result.component_indices[2] = -1;
                 result.component_indices[3] = -1;
-                break :blk;
             },
         }
 
@@ -120,7 +125,7 @@ const Value = struct {
             component_indices_str = try std.fmt.allocPrint(allocator, ".{c}{c}{c}{c}", .{getComponentStr(self.component_indices[0]), getComponentStr(self.component_indices[1]), getComponentStr(self.component_indices[2]), getComponentStr(self.component_indices[3])});
         }
 
-        return try std.fmt.allocPrint(allocator, "{s}{s}", .{self.name, component_indices_str});
+        return try std.fmt.allocPrint(allocator, "{s}{}{s}", .{self.name, self.register_index, component_indices_str});
     }
 };
 
@@ -150,11 +155,11 @@ pub const Builder = struct {
     }
 
     // Utility
-    fn getAvailableRegisterName(self: *Builder) ![]const u8 {
+    fn getAvailableRegister(self: *Builder) u32 {
         const result = self.register_counter;
         self.register_counter += 1;
 
-        return std.fmt.allocPrint(self.allocator.allocator(), "r{}", .{result});
+        return result;
     }
 
     fn getValueName(self: *Builder, value: *const Value) ![]const u8 {
@@ -237,7 +242,7 @@ pub const Builder = struct {
             else => std.debug.panic("Unsupported constant type\n", .{}),
         };
 
-        var value = Value.init("const0", type_v); // TODO: use the result id for naming
+        var value = Value.init("const", result, type_v); // TODO: use the result id for naming
         value.constant = constant;
         try self.id_map.put(result, value);
 
@@ -252,13 +257,27 @@ pub const Builder = struct {
         const type_v = &self.type_map.get(ty).?;
 
         var name: []const u8 = undefined;
+        var register_index: u32 = undefined;
         switch (storage_class) {
-            .Input => name = "v0", // TODO: get the input index
-            .Uniform => name = "uniform", // TODO: get the uniform index
-            else => name = try self.getAvailableRegisterName(),
+            .Input => {
+                name = "v";
+                register_index = 0; // TODO: get the input index
+            },
+            .Output => {
+                name = "o";
+                register_index = 0; // TODO: get the output index
+            },
+            .Uniform => {
+                name = "uniform";
+                register_index = 0; // TODO: get the uniform index
+            },
+            else => {
+                name = "r";
+                register_index = self.getAvailableRegister();
+            },
         }
 
-        var value = Value.init(name, type_v);
+        var value = Value.init(name, register_index, type_v);
         // TODO: set component indices and array size
         try self.id_map.put(result, value);
         switch (storage_class) {
@@ -285,15 +304,15 @@ pub const Builder = struct {
     pub fn createExtract(self: *Builder, _: anytype, result: u32, composite: u32, indices: []const u32) !void {
         var value = self.id_map.get(composite).?;
         for (indices) |index| {
-            var index_v = Value.init("", &Type{ .Int = .{ .is_signed = false } });
+            var index_v = Value.init("INVALID", 0, &Type{ .Int = .{ .is_signed = false } });
             index_v.constant = Constant{ .Uint = index };
             value = try value.indexInto(self.allocator.allocator(), &index_v);
         }
         try self.id_map.put(result, value);
     }
 
-    pub fn createAccessChain(self: *Builder, _: anytype, result: u32, composite: u32, indices: []const u32) !void {
-        var value = self.id_map.get(composite).?;
+    pub fn createAccessChain(self: *Builder, _: anytype, result: u32, ptr: u32, indices: []const u32) !void {
+        var value = self.id_map.get(ptr).?;
         for (indices) |index| {
             const index_v = self.id_map.get(index);
             if (index_v) |*ind_v| {
@@ -306,7 +325,7 @@ pub const Builder = struct {
     pub fn createConstruct(self: *Builder, writer: anytype, result: u32, ty: u32, components: []const u32) !void {
         const type_v = &self.type_map.get(ty).?;
 
-        const value = Value.init(try self.getAvailableRegisterName(), type_v);
+        const value = Value.init("r", self.getAvailableRegister(), type_v);
         for (0..components.len) |i| {
             const component = self.id_map.get(components[i]).?;
             try writer.printLine("mov {s}.{c}, {s}", .{try self.getValueName(&value), getComponentStr(i), try self.getValueName(&component)});
@@ -319,7 +338,7 @@ pub const Builder = struct {
 
         const lhs_v = self.id_map.get(lhs).?;
         const rhs_v = self.id_map.get(rhs).?;
-        const value = Value.init(try self.getAvailableRegisterName(), type_v);
+        const value = Value.init("r", self.getAvailableRegister(), type_v);
         try self.id_map.put(result, value);
         // TODO: check how many components the vector has
         try writer.printLine("add {s}, {s}, {s}", .{try self.getValueName(&value), try self.getValueName(&lhs_v), try self.getValueName(&rhs_v)});
@@ -330,7 +349,7 @@ pub const Builder = struct {
 
         const vec_v = self.id_map.get(vec).?;
         const scalar_v = self.id_map.get(scalar).?;
-        const value = Value.init(try self.getAvailableRegisterName(), type_v);
+        const value = Value.init("r", self.getAvailableRegister(), type_v);
         try self.id_map.put(result, value);
         // TODO: check how many components the vector has
         try writer.printLine("mul {s}, {s}, {s}.xxxx", .{try self.getValueName(&value), try self.getValueName(&vec_v), try self.getValueName(&scalar_v)});
