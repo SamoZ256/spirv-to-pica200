@@ -15,19 +15,19 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
-    const generate_headers = b.addExecutable(.{
-        .name = "generate-headers",
-        .root_source_file = b.path("src/spirv/generate_headers.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
+    //const generate_headers = b.addExecutable(.{
+    //    .name = "generate-headers",
+    //    .root_source_file = b.path("src/spirv/generate_headers.zig"),
+    //    .target = target,
+    //    .optimize = optimize,
+    //});
 
     // zig-json
-    const zig_json = b.dependency("zig_json", .{ .target = target, .optimize = optimize });
+    //const zig_json = b.dependency("zig_json", .{ .target = target, .optimize = optimize });
 
-    generate_headers.root_module.addImport("json", zig_json.module("zig-json"));
+    //generate_headers.root_module.addImport("json", zig_json.module("zig-json"));
 
-    const generate = b.addRunArtifact(generate_headers);
+    //const generate = b.addRunArtifact(generate_headers);
 
     const lib = b.addStaticLibrary(.{
         .name = "spirv-to-pica200",
@@ -85,7 +85,7 @@ pub fn build(b: *std.Build) void {
     // and can be selected like this: `zig build run`
     // This will evaluate the `run` step rather than the default, which is "install".
     const run_step = b.step("run", "Run the app");
-    run_step.dependOn(&generate.step);
+    //run_step.dependOn(&generate.step);
     run_step.dependOn(&run_cmd.step);
 
     // Creates a step for unit testing. This only builds the test executable
@@ -110,7 +110,7 @@ pub fn build(b: *std.Build) void {
     // the `zig build --help` menu, providing a way for the user to request
     // running the unit tests.
     const test_step = b.step("test", "Run unit tests");
-    test_step.dependOn(&generate.step);
+    //test_step.dependOn(&generate.step);
     test_step.dependOn(&run_lib_unit_tests.step);
     test_step.dependOn(&run_exe_unit_tests.step);
 }

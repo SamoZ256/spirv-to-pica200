@@ -8,7 +8,11 @@ pub fn main() !void {
     const spv_len = data.len / @sizeOf(u32) * @sizeOf(u8);
     const spv = @as([*]const u32, @ptrCast(@alignCast(data.ptr)))[0..spv_len];
 
-    var translatr = translator.Translator.init(spv);
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    var translatr = translator.Translator.init(allocator, spv);
 
     try translatr.translate(std.io.getStdOut().writer());
 }

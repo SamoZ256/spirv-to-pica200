@@ -2,6 +2,15 @@ const std = @import("std");
 const spirv = @import("spirv/mod.zig");
 const pica200 = @import("pica200/mod.zig");
 
+fn toPica200StorageClass(storage_class: spirv.headers.StorageClass) pica200.builder.StorageClass {
+    return switch (storage_class) {
+        .Input => pica200.builder.StorageClass.Input,
+        .Output => pica200.builder.StorageClass.Output,
+        .Uniform, .UniformConstant => pica200.builder.StorageClass.Uniform,
+        else => pica200.builder.StorageClass.Function,
+    };
+}
+
 fn Writer(w_type: type) type {
     return struct {
         w: w_type,
@@ -45,10 +54,10 @@ pub const Translator = struct {
     spirv_reader: spirv.reader.Reader,
     pica200_builder: pica200.builder.Builder,
 
-    pub fn init(spv: []const u32) Translator {
+    pub fn init(allocator: std.mem.Allocator, spv: []const u32) Translator {
         var self: Translator = undefined;
         self.spirv_reader = spirv.reader.Reader.init(spv);
-        self.pica200_builder = pica200.builder.Builder.init();
+        self.pica200_builder = pica200.builder.Builder.init(allocator);
 
         return self;
     }
@@ -68,11 +77,12 @@ pub const Translator = struct {
     // TODO: use the writer
     fn translateInstruction(self: *Translator, writer: anytype, instruction: *const spirv.reader.Instruction) !void {
         try switch (instruction.opcode) {
-            .OpNop => self.builder.CreateNop(),
-            .OpFunction => self.builder.CreateFunction(),
-            .OpFunctionEnd => self.builder.CreateFunctionEnd(),
-            .OpLabel => self.builder.CreateLabel(instruction.result_id),
-            .OpCompositeExtract => self.builder.CreateCompositeExtract(instruction.result_id, instruction.operands[0], instruction.operands[1..(instruction.operands.len - 1)]),
+            .OpNop => self.pica200_builder.CreateNop(writer),
+            .OpFunction => self.pica200_builder.CreateFunction(writer),
+            .OpFunctionEnd => self.pica200_builder.CreateFunctionEnd(writer),
+            .OpLabel => self.pica200_builder.CreateLabel(writer, instruction.result_id),
+            .OpVariable => self.pica200_builder.CreateVariable(writer, instruction.result_id, instruction.result_type_id, toPica200StorageClass(@enumFromInt(instruction.operands[0]))),
+            .OpCompositeExtract => self.pica200_builder.CreateCompositeExtract(writer, instruction.result_id, instruction.operands[0], instruction.operands[1..(instruction.operands.len - 1)]),
             else => try writer.printLine("{}", .{instruction.opcode}),
         };
     }
