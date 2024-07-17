@@ -116,16 +116,14 @@ const Type = struct {
 };
 
 const Value = struct {
-    id: u32,
     name: []const u8,
     register_index: u32,
     ty: Type, // HACK: this should be *const Type
     component_indices: [4]i8,
     constant: ?Constant,
 
-    pub fn init(id: u32, name: []const u8, register_index: u32, ty: Type) Value {
+    pub fn init(name: []const u8, register_index: u32, ty: Type) Value {
         var self: Value = undefined;
-        self.id = id;
         self.name = name;
         self.register_index = register_index;
         self.ty = ty;
@@ -205,14 +203,11 @@ const Writer = struct {
     }
 
     pub fn printLine(self: *Writer, comptime fmt: []const u8, args: anytype) !void {
-        std.debug.print("printLine 1\n", .{});
         if (self.in_scope) {
             _ = try self.arr.writer().write("    ");
         }
-        std.debug.print("printLine 2\n", .{});
         try self.arr.writer().print(fmt, args);
         _ = try self.arr.writer().write("\n");
-        std.debug.print("printLine 3\n", .{});
     }
 
     pub fn printLineScopeIgnored(self: *Writer, comptime fmt: []const u8, args: anytype) !void {
@@ -258,33 +253,34 @@ pub const Builder = struct {
         self.type_map = std.AutoHashMap(u32, Type).init(allocator);
         self.decoration_map = std.AutoHashMap(u32, DecorationProperties).init(allocator);
 
-        // Writers
-        self.header_array = std.ArrayList(u8).init(self.fba.allocator());
-        self.header_writer = Writer.init(&self.header_array);
-        self.body_array = std.ArrayList(u8).init(self.fba.allocator());
-        self.body_writer = Writer.init(&self.body_array);
-
         // HACK
         self.register_counter = 0;
 
         return self;
     }
 
-    pub fn deinit(self: *Builder) void {
-        self.body_array.deinit();
+    pub fn initWriters(self: *Builder) void {
+        self.header_array = std.ArrayList(u8).init(self.fba.allocator());
+        self.header_writer = Writer.init(&self.header_array);
+        self.body_array = std.ArrayList(u8).init(self.fba.allocator());
+        self.body_writer = Writer.init(&self.body_array);
+    }
+
+    pub fn deinitWriters(self: *Builder) void {
         self.header_array.deinit();
+        self.body_array.deinit();
+    }
+
+    pub fn deinit(self: *Builder) void {
         self.decoration_map.deinit();
         self.type_map.deinit();
         self.id_map.deinit();
         self.allocator.deinit();
     }
 
-    pub fn write(self: *Builder, _: anytype) !void {
-        _ = try self.header_array.writer().write("Hello");
-        try self.header_writer.printLine("Hello2", .{});
-        //_ = try writer.write(self.header_array.items);
-        //_ = try writer.write(self.body_array.items);
-        std.debug.print("{s}\n{s}\n", .{self.header_array.items, self.body_array.items});
+    pub fn write(self: *Builder, writer: anytype) !void {
+        _ = try writer.write(self.header_array.items);
+        _ = try writer.write(self.body_array.items);
     }
 
     // Utility
@@ -309,11 +305,9 @@ pub const Builder = struct {
             .Location => |location| {
                 decoration_props.value_ptr.has_location = true;
                 decoration_props.value_ptr.location = location;
-                try self.header_writer.printLine(".out o{} {s}", .{location, getOutputName(location)});
             },
             .Position => {
                 decoration_props.value_ptr.position = true;
-                try self.header_writer.printLine(".out outpos0 position", .{});
             },
             else => {},
         }
@@ -380,9 +374,7 @@ pub const Builder = struct {
 
     // Instructions
     pub fn createMain(self: *Builder) !void {
-        std.debug.print("Test 1 passed\n", .{});
         try self.body_writer.enterScope(".proc main");
-        std.debug.print("Test 1.1 passed\n", .{});
     }
 
     pub fn createEnd(self: *Builder) !void {
@@ -390,9 +382,7 @@ pub const Builder = struct {
     }
 
     pub fn createLabel(self: *Builder, id: u32) !void {
-        std.debug.print("Test 2 passed\n", .{});
         try self.body_writer.printLineScopeIgnored("label{}:", .{id});
-        std.debug.print("Test 2.1 passed\n", .{});
     }
 
     pub fn createConstant(self: *Builder, result: u32, ty: u32, val: u32) !void {
@@ -411,7 +401,7 @@ pub const Builder = struct {
             else => std.debug.panic("Unsupported constant type\n", .{}),
         };
 
-        var value = Value.init(result, "const", result, type_v); // TODO: use the result id for naming
+        var value = Value.init("const", result, type_v); // TODO: use the result id for naming
         value.constant = constant;
         try self.id_map.put(result, value);
 
@@ -465,9 +455,14 @@ pub const Builder = struct {
                 if (decoration_props.?.position) {
                     name = "outpos";
                     register_index = 0;
-                } else {
+                    try self.header_writer.printLine(".out outpos0 position", .{});
+                } else if (decoration_props.?.has_location) {
+                    const location = decoration_props.?.location;
                     name = "o";
-                    register_index = decoration_props.?.location;
+                    register_index = location;
+                    try self.header_writer.printLine(".out o{} {s}", .{location, getOutputName(location)});
+                } else {
+                    std.debug.print("warn: output without decoration\n", .{});
                 }
             },
             .Uniform => {
@@ -480,7 +475,7 @@ pub const Builder = struct {
             },
         }
 
-        var value = Value.init(result, name, register_index, type_v);
+        var value = Value.init(name, register_index, type_v);
         try self.id_map.put(result, value);
         switch (storage_class) {
             .Uniform => try self.header_writer.printLine(".fvec {s}", .{try self.getValueName(&value)}),
@@ -498,20 +493,16 @@ pub const Builder = struct {
     }
 
     pub fn createStore(self: *Builder, ptr: u32, val: u32) !void {
-        std.debug.print("Test 3 passed\n", .{});
         const ptr_v = self.id_map.get(ptr).?;
         const val_v = self.id_map.get(val).?;
-        std.debug.print("Test 3.0.1 passed\n", .{});
         try self.body_writer.printLine("mov {s}, {s}", .{try self.getValueName(&ptr_v), try self.getValueName(&val_v)});
-
-        std.debug.print("Test 3.1 passed\n", .{});
     }
 
     fn indexToValue(self: *Builder, index: u32, is_id: bool) *const Value {
         if (is_id) {
             return &self.id_map.get(index).?;
         } else {
-            var index_v = Value.init(0, "INVALID", 0, .{ .id = 0, .ty = .{ .Int = .{ .is_signed = false } } });
+            var index_v = Value.init("INVALID", 0, .{ .id = 0, .ty = .{ .Int = .{ .is_signed = false } } });
             index_v.constant = Constant{ .Uint = index };
 
             return &index_v;
@@ -541,7 +532,7 @@ pub const Builder = struct {
     pub fn createConstruct(self: *Builder, result: u32, ty: u32, components: []const u32) !void {
         const type_v = self.type_map.get(ty).?;
 
-        const value = Value.init(result, "r", self.getAvailableRegister(type_v.ty.getRegisterCount()), type_v);
+        const value = Value.init("r", self.getAvailableRegister(type_v.ty.getRegisterCount()), type_v);
         for (0..components.len) |i| {
             const component = self.id_map.get(components[i]).?;
             try self.body_writer.printLine("mov {s}.{c}, {s}", .{try self.getValueName(&value), getComponentStr(i), try self.getValueName(&component)});
@@ -554,7 +545,7 @@ pub const Builder = struct {
 
         const lhs_v = self.id_map.get(lhs).?;
         const rhs_v = self.id_map.get(rhs).?;
-        const value = Value.init(result, "r", self.getAvailableRegister(type_v.ty.getRegisterCount()), type_v);
+        const value = Value.init("r", self.getAvailableRegister(type_v.ty.getRegisterCount()), type_v);
         try self.id_map.put(result, value);
         // TODO: check how many components the vector has
         try self.body_writer.printLine("add {s}, {s}, {s}", .{try self.getValueName(&value), try self.getValueName(&lhs_v), try self.getValueName(&rhs_v)});
@@ -565,7 +556,7 @@ pub const Builder = struct {
 
         const vec_v = self.id_map.get(vec).?;
         const scalar_v = self.id_map.get(scalar).?;
-        const value = Value.init(result, "r", self.getAvailableRegister(type_v.ty.getRegisterCount()), type_v);
+        const value = Value.init("r", self.getAvailableRegister(type_v.ty.getRegisterCount()), type_v);
         try self.id_map.put(result, value);
         // TODO: check how many components the vector has
         try self.body_writer.printLine("mul {s}, {s}, {s}.xxxx", .{try self.getValueName(&value), try self.getValueName(&vec_v), try self.getValueName(&scalar_v)});
