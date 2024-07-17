@@ -1,7 +1,5 @@
 const std = @import("std");
 
-const MEMBER_INDEX_SHIFT = 24;
-
 pub const StorageClass = enum {
     Function,
     Input,
@@ -22,6 +20,8 @@ pub const Decoration = union(DecorationType) {
 };
 
 const DecorationProperties = struct {
+    has_location: bool,
+
     location: u32,
     position: bool,
 };
@@ -161,6 +161,25 @@ const Value = struct {
     }
 };
 
+const RegisterType = enum {
+    Vertex,
+    Output,
+    Uniform,
+    Temporary,
+};
+
+fn memberIndexToId(id: u32, member_index: u32) u32 {
+    return ((member_index + 1) << 24) | id;
+}
+
+fn idToMemberIndex(id: u32) struct { id: u32, member_index: u32, is_member: bool } {
+    if ((id >> 24) == 0) {
+        return .{ .id = id, .member_index = 0, .is_member = false };
+    } else {
+        return .{ .id = id & 0xFFFFFF, .member_index = (id >> 24) - 1, .is_member = true };
+    }
+}
+
 pub const Builder = struct {
     allocator: std.heap.ArenaAllocator,
     id_map: std.AutoHashMap(u32, Value),
@@ -168,7 +187,7 @@ pub const Builder = struct {
     decoration_map: std.AutoHashMap(u32, DecorationProperties),
 
     // HACK
-    register_counter: u32,
+    register_counters: [4]u32,
 
     pub fn init(allocator: std.mem.Allocator) Builder {
         var self: Builder = undefined;
@@ -176,7 +195,7 @@ pub const Builder = struct {
         self.id_map = std.AutoHashMap(u32, Value).init(allocator);
         self.type_map = std.AutoHashMap(u32, Type).init(allocator);
         self.decoration_map = std.AutoHashMap(u32, DecorationProperties).init(allocator);
-        self.register_counter = 0;
+        self.register_counters = .{0} ** 4;
 
         return self;
     }
@@ -188,10 +207,22 @@ pub const Builder = struct {
         self.allocator.deinit();
     }
 
+    pub fn decorate(self: *Builder, _: anytype) !void {
+        var it = self.decoration_map.iterator();
+        while (it.next()) |kv| {
+            const id = kv.key_ptr.*;
+            const decoration_props = kv.value_ptr;
+            const real_id = idToMemberIndex(id);
+
+            std.debug.print("Decoration for {}: {}\n", .{real_id, decoration_props});
+        }
+    }
+
     // Utility
-    fn getAvailableRegister(self: *Builder, count: u32) u32 {
-        const result = self.register_counter;
-        self.register_counter += count;
+    fn getAvailableRegister(self: *Builder, ty: RegisterType, count: u32) u32 {
+        const register_counter = &self.register_counters[@intFromEnum(ty)];
+        const result = register_counter.*;
+        register_counter.* += count;
 
         return result;
     }
@@ -203,16 +234,21 @@ pub const Builder = struct {
     // Decoration instructions
     pub fn createDecoration(self: *Builder, target_id: u32, decoration: Decoration) !void {
         const decoration_props = try self.decoration_map.getOrPut(target_id);
+        if (!decoration_props.found_existing) {
+            decoration_props.value_ptr.has_location = false;
+        }
         switch (decoration) {
-            .Location => |location| decoration_props.value_ptr.location = location,
+            .Location => |location| {
+                decoration_props.value_ptr.has_location = true;
+                decoration_props.value_ptr.location = location;
+            },
             .Position => decoration_props.value_ptr.position = true,
             else => {},
         }
-        std.debug.print("Decorated {}: {}\n", .{target_id, decoration});
     }
 
     pub fn createMemberDecoration(self: *Builder, target_id: u32, member_index: u32, decoration: Decoration) !void {
-        try self.createDecoration(target_id | (member_index << MEMBER_INDEX_SHIFT), decoration);
+        try self.createDecoration(memberIndexToId(target_id, member_index), decoration);
     }
 
     // Type instructions
@@ -268,11 +304,6 @@ pub const Builder = struct {
         const element_type_t = self.type_map.get(element_type).?;
         // Just copy the type
         try self.type_map.put(result, element_type_t);
-        // Also copy the decoration
-        if (self.decoration_map.get(element_type)) |d| {
-            try self.decoration_map.put(result, d);
-            std.debug.print("Copied decoration to {}: {}\n", .{result, d});
-        }
     }
 
     // Instructions
@@ -318,27 +349,19 @@ pub const Builder = struct {
     pub fn createVariable(self: *Builder, writer: anytype, result: u32, ty: u32, storage_class: StorageClass) !void {
         const type_v = self.type_map.get(ty).?;
 
-        try self.createVariableImpl(writer, result, ty, type_v, storage_class);
+        try self.createVariableImpl(writer, result, type_v, storage_class);
     }
 
-    pub fn createVariableImpl(self: *Builder, writer: anytype, result: u32, ty: u32, type_v: Type, storage_class: StorageClass) !void {
-        std.debug.print("Type of variable: {}\n", .{type_v});
-        std.debug.print("Result 1: {}, {}\n", .{result, ty});
+    pub fn createVariableImpl(self: *Builder, writer: anytype, result: u32, type_v: Type, storage_class: StorageClass) !void {
         switch (type_v) {
             .Struct => |struct_t| {
                 for (0..struct_t.member_types.len) |i| {
                     const member_t = struct_t.member_types[i];
-                    try self.createVariableImpl(writer, result | @as(u32, @intCast(i << MEMBER_INDEX_SHIFT)), ty | @as(u32, @intCast(i << MEMBER_INDEX_SHIFT)), member_t.*, storage_class);
+                    try self.createVariableImpl(writer, memberIndexToId(result, @intCast(i)), member_t.*, storage_class);
                 }
                 return;
             },
             else => {},
-        }
-        std.debug.print("Result 2: {}\n", .{result});
-
-        var decoration_props = self.decoration_map.get(result);
-        if (decoration_props == null) {
-            decoration_props = self.decoration_map.get(ty);
         }
 
         var name: []const u8 = undefined;
@@ -346,20 +369,19 @@ pub const Builder = struct {
         switch (storage_class) {
             .Input => {
                 name = "v";
-                register_index = decoration_props.?.location;
+                register_index = self.getAvailableRegister(.Vertex, type_v.getRegisterCount());
             },
             .Output => {
                 name = "o";
-                std.debug.print("Type of output: {}\n", .{type_v});
-                register_index = decoration_props.?.location;
+                register_index = self.getAvailableRegister(.Output, type_v.getRegisterCount());
             },
             .Uniform => {
                 name = "uniform";
-                register_index = decoration_props.?.location;
+                register_index = self.getAvailableRegister(.Uniform, type_v.getRegisterCount());
             },
             else => {
                 name = "r";
-                register_index = self.getAvailableRegister(type_v.getRegisterCount());
+                register_index = self.getAvailableRegister(.Temporary, type_v.getRegisterCount());
             },
         }
 
@@ -398,15 +420,16 @@ pub const Builder = struct {
     }
 
     pub fn createAccessChain(self: *Builder, writer: anytype, result: u32, ptr: u32, indices: []const u32, indices_are_ids: bool) !void {
-        var value = self.id_map.get(ptr).?;
+        const v = self.id_map.get(ptr);
 
         // The first index is the member index (if the pointer is a struct)
-        switch (value.ty) {
-            .Struct => {
-                const index_v = self.indexToValue(indices[0], indices_are_ids);
-                try self.createAccessChain(writer, result, ptr | (index_v.constant.?.toIndex() << MEMBER_INDEX_SHIFT), indices[1..], indices_are_ids);
-            },
-            else => {},
+        var value: Value = undefined;
+        if (v) |val| {
+            value = val;
+        } else {
+            const index_v = self.indexToValue(indices[0], indices_are_ids);
+            try self.createAccessChain(writer, result, memberIndexToId(ptr, index_v.constant.?.toIndex()), indices[1..], indices_are_ids);
+            return;
         }
 
         for (indices) |index| {
@@ -419,7 +442,7 @@ pub const Builder = struct {
     pub fn createConstruct(self: *Builder, writer: anytype, result: u32, ty: u32, components: []const u32) !void {
         const type_v = self.type_map.get(ty).?;
 
-        const value = Value.init(result, "r", self.getAvailableRegister(type_v.getRegisterCount()), type_v);
+        const value = Value.init(result, "r", self.getAvailableRegister(.Temporary, type_v.getRegisterCount()), type_v);
         for (0..components.len) |i| {
             const component = self.id_map.get(components[i]).?;
             try writer.printLine("mov {s}.{c}, {s}", .{try self.getValueName(&value), getComponentStr(i), try self.getValueName(&component)});
@@ -432,7 +455,7 @@ pub const Builder = struct {
 
         const lhs_v = self.id_map.get(lhs).?;
         const rhs_v = self.id_map.get(rhs).?;
-        const value = Value.init(result, "r", self.getAvailableRegister(type_v.getRegisterCount()), type_v);
+        const value = Value.init(result, "r", self.getAvailableRegister(.Temporary, type_v.getRegisterCount()), type_v);
         try self.id_map.put(result, value);
         // TODO: check how many components the vector has
         try writer.printLine("add {s}, {s}, {s}", .{try self.getValueName(&value), try self.getValueName(&lhs_v), try self.getValueName(&rhs_v)});
@@ -443,7 +466,7 @@ pub const Builder = struct {
 
         const vec_v = self.id_map.get(vec).?;
         const scalar_v = self.id_map.get(scalar).?;
-        const value = Value.init(result, "r", self.getAvailableRegister(type_v.getRegisterCount()), type_v);
+        const value = Value.init(result, "r", self.getAvailableRegister(.Temporary, type_v.getRegisterCount()), type_v);
         try self.id_map.put(result, value);
         // TODO: check how many components the vector has
         try writer.printLine("mul {s}, {s}, {s}.xxxx", .{try self.getValueName(&value), try self.getValueName(&vec_v), try self.getValueName(&scalar_v)});

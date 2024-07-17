@@ -88,6 +88,7 @@ pub const Translator = struct {
             const instruction = self.spirv_reader.readInstruction();
             try self.translateInstruction(&writer, &instruction);
         }
+        try self.pica200_builder.decorate(&writer);
     }
 
     fn translateInstruction(self: *Translator, writer: anytype, instruction: *const spirv.reader.Instruction) !void {
