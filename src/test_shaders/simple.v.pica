@@ -1,23 +1,23 @@
-.fvec uniform1
+.fvec uniform1.xy
 
-.constf const20(0e0, 0e0, 0e0, 0e0)
-.constf const21(1e0, 1e0, 1e0, 1e0)
-.constf const30(5e-1, 5e-1, 5e-1, 5e-1)
-.constf const41(5e-1, 5e-1, 0e0, 0e0)
+.constf const20.x(0e0, 0e0, 0e0, 0e0)
+.constf const21.x(1e0, 1e0, 1e0, 1e0)
+.constf const30.x(5e-1, 5e-1, 5e-1, 5e-1)
+.constf const41.xy(5e-1, 5e-1, 0e0, 0e0)
 
 .out outpos0 position
 .out outtexcoord0 texcoord0
 
 .proc main
 label5:
-    mov r0.x, v0.x   
-    mov r0.y, v0.y   
-    mov r0.z, const20
-    mov r0.w, const21
+    mov r0.x, v0.x
+    mov r0.y, v0.y
+    mov r0.z, const20.x
+    mov r0.w, const21.x
     mov outpos, r0
-    mul r1, v0, const30
-    add r2, r1, const41
-    add r3, r2, uniform1
-    mov outtexcoord0, r3
+    mul r1.xy, v0.xy, const30.x
+    add r2.xy, r1.xy, const41.xy
+    add r3.xy, r2.xy, uniform1.xy
+    mov outtexcoord0.xy, r3.xy
 .end
 

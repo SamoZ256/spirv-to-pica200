@@ -55,12 +55,15 @@ const Constant = union(ScalarType) {
     }
 };
 
-fn getComponentStr(component: anytype) u8 {
-    if (component == -1) {
-        return ' ';
-    }
-
-    return "xyzw"[@intCast(component)];
+fn getComponentStr(component: i8) []const u8 {
+    return switch (component) {
+        -1 => "",
+        0 => "x",
+        1 => "y",
+        2 => "z",
+        3 => "w",
+        else => std.debug.panic("invalid component index\n", .{}),
+    };
 }
 
 const TypeId = enum {
@@ -100,10 +103,7 @@ const Ty = union(TypeId) {
     pub fn getRegisterCount(self: Ty) u32 {
         return switch (self) {
             .Void => 0,
-            .Bool => 1,
-            .Int => 1,
-            .Float => 1,
-            .Vector => 1,
+            .Bool, .Int, .Float, .Vector => 1,
             .Matrix => |mtx_type| mtx_type.column_count * mtx_type.column_type.ty.getRegisterCount(),
             .Array => |arr_type| arr_type.element_count * arr_type.element_type.ty.getRegisterCount(),
             .Struct => |struct_type| {
@@ -113,6 +113,17 @@ const Ty = union(TypeId) {
                 }
                 return result;
             },
+        };
+    }
+
+    pub fn getComponentCount(self: Ty) u32 {
+        return switch (self) {
+            .Void => 0,
+            .Bool, .Int, .Float => 1,
+            .Vector => |vector_t| vector_t.component_count,
+            .Matrix => |matrix_t| matrix_t.column_type.ty.getComponentCount(),
+            .Array => |array_t| array_t.element_type.ty.getComponentCount(),
+            .Struct => unreachable,
         };
     }
 };
@@ -132,10 +143,14 @@ const Value = struct {
         var self: Value = undefined;
         self.name = name;
         self.ty = ty;
-        self.component_indices[0] = 0;
-        self.component_indices[1] = 1;
-        self.component_indices[2] = 2;
-        self.component_indices[3] = 3;
+        const component_count = self.ty.ty.getComponentCount();
+        for (0..4) |i| {
+            if (i < component_count) {
+                self.component_indices[i] = @intCast(i);
+            } else {
+                self.component_indices[i] = -1;
+            }
+        }
         self.constant = null;
 
         return self;
@@ -161,8 +176,9 @@ const Value = struct {
 
     pub fn getName(self: *const Value, allocator: std.mem.Allocator) ![]const u8 {
         var component_indices_str: []const u8 = "";
-        if (self.component_indices[0] != 0 or self.component_indices[1] != 1 or self.component_indices[2] != 2 or self.component_indices[3] != 3) {
-            component_indices_str = try std.fmt.allocPrint(allocator, ".{c}{c}{c}{c}", .{getComponentStr(self.component_indices[0]), getComponentStr(self.component_indices[1]), getComponentStr(self.component_indices[2]), getComponentStr(self.component_indices[3])});
+        if ((self.component_indices[0] != 0 or self.component_indices[1] != 1 or self.component_indices[2] != 2 or self.component_indices[3] != 3) and
+            (self.component_indices[0] != -1 or self.component_indices[1] != -1 or self.component_indices[2] != -1 or self.component_indices[3] != -1)) {
+            component_indices_str = try std.fmt.allocPrint(allocator, ".{s}{s}{s}{s}", .{getComponentStr(self.component_indices[0]), getComponentStr(self.component_indices[1]), getComponentStr(self.component_indices[2]), getComponentStr(self.component_indices[3])});
         }
 
         return try std.fmt.allocPrint(allocator, "{s}{s}", .{self.name, component_indices_str});
@@ -580,10 +596,11 @@ pub const Builder = struct {
     pub fn createConstruct(self: *Builder, result: u32, ty: u32, components: []const u32) !void {
         const type_v = self.type_map.get(ty).?;
 
-        const value = Value.init(try self.getAvailableRegisterName(type_v.ty.getRegisterCount()), type_v);
+        var value = Value.init(try self.getAvailableRegisterName(type_v.ty.getRegisterCount()), type_v);
         for (0..components.len) |i| {
             const component = self.id_map.get(components[i]).?;
-            try self.body.printLine("mov {s}.{c}, {s}", .{try self.getValueName(&value), getComponentStr(i), try self.getValueName(&component)});
+            const index_v = self.indexToValue(@intCast(i), false);
+            try self.body.printLine("mov {s}, {s}", .{try self.getValueName(&try value.indexInto(self.allocator.allocator(), index_v)), try self.getValueName(&component)});
         }
         try self.id_map.put(result, value);
     }
@@ -610,10 +627,11 @@ pub const Builder = struct {
         try self.id_map.put(result, value);
 
         if (invert) {
-            const new_rhs_v = Value.init(try self.getAvailableRegisterName(type_v.ty.getRegisterCount()), type_v);
+            var new_rhs_v = Value.init(try self.getAvailableRegisterName(type_v.ty.getRegisterCount()), type_v);
             // TODO: check how many components
             for (0..4) |i| {
-                try self.body.printLine("rcp {s}.{c}, {s}", .{try self.getValueName(&new_rhs_v), getComponentStr(i), try self.getValueName(rhs_v)});
+                const index_v = self.indexToValue(@intCast(i), false);
+                try self.body.printLine("rcp {s}, {s}", .{try self.getValueName(&try new_rhs_v.indexInto(self.allocator.allocator(), index_v)), try self.getValueName(rhs_v)});
             }
             rhs_v = &new_rhs_v;
         }
