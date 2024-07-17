@@ -26,7 +26,7 @@
                OpMemberDecorate %gl_PerVertex 3 BuiltIn CullDistance
                OpDecorate %gl_PerVertex Block
                OpDecorate %a_position Location 0
-               OpDecorate %v_texCoord Location 0
+               OpDecorate %v_texCoord Location 2
                OpDecorate %texCoordOffset Location 1
                OpDecorate %gl_VertexID BuiltIn VertexId
                OpDecorate %gl_InstanceID BuiltIn InstanceId

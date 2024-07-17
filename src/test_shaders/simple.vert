@@ -2,7 +2,7 @@
 
 layout (location = 0) in vec2 a_position;
 
-layout (location = 0) out vec2 v_texCoord;
+layout (location = 2) out vec2 v_texCoord;
 
 layout (location = 1) uniform vec2 texCoordOffset;
 
