@@ -15,7 +15,7 @@ label5:
     mov r0.z, const20
     mov r0.w, const21
     mov outpos, r0
-    mul r1, v0, const30.xxxx
+    mul r1, v0, const30
     add r2, r1, const41
     add r3, r2, uniform1
     mov outtexcoord0, r3

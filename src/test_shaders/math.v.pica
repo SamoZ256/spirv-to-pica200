@@ -1,0 +1,25 @@
+.fvec uniform0
+
+.constf const12(3e0, 3e0, 3e0, 3e0)
+.constf const19(7.076585e1, 7.076585e1, 7.076585e1, 7.076585e1)
+.constf const47(1e0, 1e0, 1e0, 1e0)
+.constf const59(7.076585e1, 7.076585e1, 7.076585e1, 0e0)
+
+.out outpos0 position
+
+.proc main
+label5:
+    mul r0, uniform0, const12
+    mov r1.x, r0
+    mov r1.y, r0
+    mov r1.z, r0
+    add r2, r1, -const59
+    add r3, r2.x   , r2.y   
+    add r4, r3, r2.z   
+    mov r5.x, v0.x   
+    mov r5.y, v0.y   
+    mov r5.z, r4
+    mov r5.w, const47
+    mov outpos, r5
+.end
+

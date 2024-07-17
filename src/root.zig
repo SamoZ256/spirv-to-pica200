@@ -4,6 +4,12 @@ const translator = @import("translator.zig");
 
 // TODO: fix memory leaks
 fn testShader(comptime shader_name: []const u8) !void {
+    // HACK
+    // Allocator
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    errdefer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
     // Read SPIR-V and PICA200 assembly expected output
     const data = @embedFile("test_shaders/" ++ shader_name ++ ".spv");
     const expected = @embedFile("test_shaders/" ++ shader_name ++ ".v.pica");
@@ -13,10 +19,12 @@ fn testShader(comptime shader_name: []const u8) !void {
     const spv = @as([*]const u32, @ptrCast(@alignCast(data.ptr)))[0..spv_len];
 
     // Translate
-    var translatr = translator.Translator.init(testing.allocator, spv);
+    // TODO: use testing.allocator
+    var translatr = translator.Translator.init(allocator, spv);
     errdefer translatr.deinit();
 
-    var output = std.ArrayList(u8).init(testing.allocator);
+    // TODO: use testing.allocator
+    var output = std.ArrayList(u8).init(allocator);
     errdefer output.deinit();
 
     try translatr.translate(output.writer());

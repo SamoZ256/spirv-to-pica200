@@ -588,25 +588,35 @@ pub const Builder = struct {
         try self.id_map.put(result, value);
     }
 
-    pub fn createAdd(self: *Builder, result: u32, ty: u32, lhs: u32, rhs: u32) !void {
+    pub fn createAdd(self: *Builder, result: u32, ty: u32, lhs: u32, rhs: u32, negate: bool) !void {
         const type_v = self.type_map.get(ty).?;
 
         const lhs_v = self.id_map.get(lhs).?;
         const rhs_v = self.id_map.get(rhs).?;
         const value = Value.init(try self.getAvailableRegisterName(type_v.ty.getRegisterCount()), type_v);
         try self.id_map.put(result, value);
+
+        const negate_str = if (negate) "-" else "";
         // TODO: check how many components the vector has
-        try self.body.printLine("add {s}, {s}, {s}", .{try self.getValueName(&value), try self.getValueName(&lhs_v), try self.getValueName(&rhs_v)});
+        try self.body.printLine("add {s}, {s}, {s}{s}", .{try self.getValueName(&value), try self.getValueName(&lhs_v), negate_str, try self.getValueName(&rhs_v)});
     }
 
-    pub fn createVectorTimesScalar(self: *Builder, result: u32, ty: u32, vec: u32, scalar: u32) !void {
+    pub fn createMul(self: *Builder, result: u32, ty: u32, lhs: u32, rhs: u32, invert: bool) !void {
         const type_v = self.type_map.get(ty).?;
 
-        const vec_v = self.id_map.get(vec).?;
-        const scalar_v = self.id_map.get(scalar).?;
+        const lhs_v = self.id_map.get(lhs).?;
+        var rhs_v = &self.id_map.get(rhs).?;
         const value = Value.init(try self.getAvailableRegisterName(type_v.ty.getRegisterCount()), type_v);
         try self.id_map.put(result, value);
-        // TODO: check how many components the vector has
-        try self.body.printLine("mul {s}, {s}, {s}.xxxx", .{try self.getValueName(&value), try self.getValueName(&vec_v), try self.getValueName(&scalar_v)});
+
+        if (invert) {
+            const new_rhs_v = Value.init(try self.getAvailableRegisterName(type_v.ty.getRegisterCount()), type_v);
+            // TODO: check how many components
+            for (0..4) |i| {
+                try self.body.printLine("rcp {s}.{c}, {s}", .{try self.getValueName(&new_rhs_v), getComponentStr(i), try self.getValueName(rhs_v)});
+            }
+            rhs_v = &new_rhs_v;
+        }
+        try self.body.printLine("mul {s}, {s}, {s}", .{try self.getValueName(&value), try self.getValueName(&lhs_v), try self.getValueName(rhs_v)});
     }
 };
