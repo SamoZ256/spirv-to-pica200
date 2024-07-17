@@ -43,7 +43,14 @@ const Constant = union(ScalarType) {
         return switch (self) {
             .Int => |i| @intCast(i),
             .Uint => |u| u,
-            else => std.debug.panic("Invalid array index type\n", .{}),
+            else => std.debug.panic("invalid array index type\n", .{}),
+        };
+    }
+
+    pub fn toFloat(self: Constant) f32 {
+        return switch (self) {
+            .Float => |f| f,
+            else => std.debug.panic("invalid float type\n", .{}),
         };
     }
 };
@@ -184,7 +191,7 @@ fn getOutputName(location: u32) []const u8 {
         5 => "texcoord2",
         6 => "view",
         7 => "dummy",
-        else => std.debug.panic("Invalid output location\n", .{}),
+        else => std.debug.panic("invalid output location\n", .{}),
     };
 }
 
@@ -408,7 +415,7 @@ pub const Builder = struct {
                 }
             },
             .Float => .{ .Float = @bitCast(val) },
-            else => std.debug.panic("Unsupported constant type\n", .{}),
+            else => std.debug.panic("unsupported constant type\n", .{}),
         };
 
         var value = Value.init(try std.fmt.allocPrint(self.allocator.allocator(), "const{}", .{result}), type_v);
@@ -420,6 +427,31 @@ pub const Builder = struct {
             .Float => |f| try self.constants.printLine(".constf {s}({}, {}, {}, {})", .{try self.getValueName(&value), f, f, f, f}),
             else => {},
         }
+    }
+
+    // TODO: support types other than vector of floats
+    pub fn createConstantComposite(self: *Builder, result: u32, ty: u32, constituents: []const u32) !void {
+        const type_v = self.type_map.get(ty).?;
+
+        const values: [4]f32 = switch (type_v.ty) {
+            .Vector => |vector| blk: {
+                var values: [4]f32 = undefined;
+                for (0..4) |i| {
+                    if (i < vector.component_count) {
+                        values[i] = self.id_map.get(constituents[i]).?.constant.?.toFloat();
+                    } else {
+                        values[i] = 0.0;
+                    }
+                }
+                break :blk values;
+            },
+            else => std.debug.panic("unsupported constant composite type\n", .{}),
+        };
+
+        var value = Value.init(try std.fmt.allocPrint(self.allocator.allocator(), "const{}", .{result}), type_v);
+        try self.id_map.put(result, value);
+
+        try self.constants.printLine(".constf {s}({}, {}, {}, {})", .{try self.getValueName(&value), values[0], values[1], values[2], values[3]});
     }
 
     pub fn createVariable(self: *Builder, result: u32, ty: u32, storage_class: StorageClass) !void {
@@ -467,7 +499,7 @@ pub const Builder = struct {
                     try self.outputs.printLine(".out {s} {s}", .{name, output_name});
                     break :blk name;
                 } else {
-                    std.debug.print("warn: output without decoration\n", .{});
+                    std.log.warn("output without decoration\n", .{});
                     break :blk "INVALID_OUT";
                 }
             },

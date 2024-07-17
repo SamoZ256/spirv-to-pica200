@@ -72,6 +72,7 @@ pub const Translator = struct {
             .OpFunctionEnd => self.pica200_builder.createEnd(),
             .OpLabel => self.pica200_builder.createLabel(instruction.result_id),
             .OpConstant => self.pica200_builder.createConstant(instruction.result_id, instruction.result_type_id, instruction.operands[0]),
+            .OpConstantComposite => self.pica200_builder.createConstantComposite(instruction.result_id, instruction.result_type_id, instruction.operands),
             .OpVariable => self.pica200_builder.createVariable(instruction.result_id, instruction.result_type_id, toPica200StorageClass(@enumFromInt(instruction.operands[0]))),
             .OpLoad => self.pica200_builder.createLoad(instruction.result_id, instruction.operands[0]),
             .OpStore => self.pica200_builder.createStore(instruction.operands[0], instruction.operands[1]),
@@ -94,7 +95,7 @@ pub const Translator = struct {
             // Invalid
             .OpFunctionCall => std.debug.panic("OpFunctionCall is not supported\n", .{}),
             .OpFunctionParameter => std.debug.panic("OpFunctionParameter is not supported\n", .{}),
-            else => |opcode| std.debug.panic("Unimplemented instruction {}\n", .{opcode}),
+            else => |opcode| std.debug.panic("unimplemented instruction {}\n", .{opcode}),
         };
     }
 };

@@ -2,17 +2,29 @@ const std = @import("std");
 const testing = std.testing;
 const translator = @import("translator.zig");
 
-fn compileToPICA200(data: []const u8) !void {
+// TODO: fix memory leaks
+fn testShader(comptime shader_name: []const u8) !void {
+    // Read SPIR-V and PICA200 assembly expected output
+    const data = @embedFile("test_shaders/" ++ shader_name ++ ".spv");
+    const expected = @embedFile("test_shaders/" ++ shader_name ++ ".v.pica");
+
+    // Convert
     const spv_len = data.len / @sizeOf(u32) * @sizeOf(u8);
     const spv = @as([*]const u32, @ptrCast(@alignCast(data.ptr)))[0..spv_len];
 
-    var translatr = translator.Translator.init(testing.test_allocator, spv);
-    defer translatr.deinit();
+    // Translate
+    var translatr = translator.Translator.init(testing.allocator, spv);
+    errdefer translatr.deinit();
 
-    try translatr.translate(std.io.getStdOut().writer());
+    var output = std.ArrayList(u8).init(testing.allocator);
+    errdefer output.deinit();
+
+    try translatr.translate(output.writer());
+
+    // Compare
+    try testing.expectEqualStrings(expected, output.items);
 }
 
 test "simple shader" {
-    const data = @embedFile("test_shaders/simple.spv");
-    try compileToPICA200(data);
+    try testShader("simple");
 }

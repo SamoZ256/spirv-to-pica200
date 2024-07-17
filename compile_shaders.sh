@@ -1,3 +1,7 @@
-# TODO: abstract this
-glslang -G src/test_shaders/simple.vert -o src/test_shaders/simple.spv
-spirv-dis src/test_shaders/simple.spv -o src/test_shaders/simple.spvasm
+function compileShader {
+    glslang -G -Os src/test_shaders/$1.vert -o src/test_shaders/$1.spv
+    spirv-dis src/test_shaders/$1.spv -o src/test_shaders/$1.spvasm
+}
+
+compileShader "simple"
+compileShader "math"
