@@ -2,25 +2,25 @@ const std = @import("std");
 const spirv = @import("spirv/mod.zig");
 const pica200 = @import("pica200/mod.zig");
 
-fn toPica200StorageClass(storage_class: spirv.headers.StorageClass) pica200.builder.StorageClass {
+fn toPica200StorageClass(storage_class: spirv.headers.StorageClass) pica200.base.StorageClass {
     return switch (storage_class) {
-        .Input => pica200.builder.StorageClass.Input,
-        .Output => pica200.builder.StorageClass.Output,
-        .Uniform, .UniformConstant => pica200.builder.StorageClass.Uniform,
-        else => pica200.builder.StorageClass.Function,
+        .Input => .input,
+        .Output => .output,
+        .Uniform, .UniformConstant => .uniform,
+        else => .function,
     };
 }
 
-fn toPica200Decoration(decoration: []const u32) pica200.builder.Decoration {
+fn toPica200Decoration(decoration: []const u32) pica200.base.Decoration {
     return switch (@as(spirv.headers.Decoration, @enumFromInt(decoration[0]))) {
-        .Location => .{ .Location = decoration[1] },
+        .Location => .{ .location = decoration[1] },
         .BuiltIn => blk: {
             break :blk switch (@as(spirv.headers.BuiltIn, @enumFromInt(decoration[1]))) {
-                .Position => .{ .Position = {} },
-                else => .{ .None = {} },
+                .Position => .{ .position = {} },
+                else => .{ .none = {} },
             };
         },
-        else => .{ .None = {} },
+        else => .{ .none = {} },
     };
 }
 
@@ -86,12 +86,12 @@ pub const Translator = struct {
             .OpFMul, .OpVectorTimesScalar => self.pica200_builder.createMul(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], false),
             .OpFDiv => self.pica200_builder.createMul(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], true),
             // Comparison
-            .OpFOrdEqual => self.pica200_builder.createCmp(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], .Equal),
-            .OpFOrdNotEqual => self.pica200_builder.createCmp(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], .NotEqual),
-            .OpFOrdLessThan => self.pica200_builder.createCmp(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], .LessThan),
-            .OpFOrdLessThanEqual => self.pica200_builder.createCmp(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], .LessEqual),
-            .OpFOrdGreaterThan => self.pica200_builder.createCmp(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], .GreaterThan),
-            .OpFOrdGreaterThanEqual => self.pica200_builder.createCmp(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], .GreaterEqual),
+            .OpFOrdEqual => self.pica200_builder.createCmp(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], .equal),
+            .OpFOrdNotEqual => self.pica200_builder.createCmp(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], .not_equal),
+            .OpFOrdLessThan => self.pica200_builder.createCmp(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], .less_than),
+            .OpFOrdLessThanEqual => self.pica200_builder.createCmp(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], .less_equal),
+            .OpFOrdGreaterThan => self.pica200_builder.createCmp(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], .greater_than),
+            .OpFOrdGreaterThanEqual => self.pica200_builder.createCmp(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], .greater_equal),
             // Branches
             .OpBranch => self.pica200_builder.createBranch(instruction.operands[0]),
             // Ignored
