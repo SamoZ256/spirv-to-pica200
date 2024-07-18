@@ -6,7 +6,7 @@
 .constf const17(1e0, 1e0, 1e0, 1e0)
 .constf const19(-1e0, -1e0, -1e0, -1e0)
 
-.out outpos0 position
+.out outpos position
 
 .proc main
 label5:

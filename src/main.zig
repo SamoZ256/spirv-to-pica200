@@ -1,12 +1,7 @@
 const std = @import("std");
 const translator = @import("translator.zig");
 
-fn compileShader(source_filename: []const u8, output_filename: []const u8) !void {
-    // Allocator
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    errdefer _ = gpa.deinit();
-    const allocator = gpa.allocator();
-
+fn compileShaderImpl(allocator: std.mem.Allocator, source_filename: []const u8, output_filename: []const u8) !void {
     // Read SPIR-V
     var source_file = try std.fs.cwd().openFile(source_filename, .{});
     errdefer source_file.close();
@@ -35,8 +30,51 @@ fn compileShader(source_filename: []const u8, output_filename: []const u8) !void
     _ = try output_file.write(output.items);
 }
 
+fn compileShader(source_filename: []const u8, output_filename: []const u8, assembled_output_filename: []const u8) !void {
+    // Allocator
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    errdefer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    try compileShaderImpl(allocator, source_filename, output_filename);
+
+    // Assemble the output (if enabled)
+    const args = try std.process.argsAlloc(allocator);
+    defer std.process.argsFree(allocator, args);
+
+    var assemble = false;
+    for (1..args.len) |i| {
+        if (std.mem.eql(u8, args[i], "--assemble")) {
+            assemble = true;
+        }
+    }
+
+    // Execute picasso assembler
+    if (assemble) {
+        const command = try std.fmt.allocPrint(allocator, "picasso {s} -o {s}", .{output_filename, assembled_output_filename});
+        errdefer allocator.free(command);
+
+        var child = std.process.Child.init(
+            &[_][]const u8{
+                "/bin/sh",
+                "-c",
+                command,
+            },
+            allocator,
+        );
+        //errdefer child.deinit();
+
+        // Execute the command
+        try child.spawn();
+
+        // Wait for the child process to finish
+        const result = try child.wait();
+        std.debug.print("Assembler result: {}\n", .{result});
+    }
+}
+
 pub fn main() !void {
-    try compileShader("src/test_shaders/simple.spv", "src/test_shaders/simple.v.pica");
-    try compileShader("src/test_shaders/math.spv", "src/test_shaders/math.v.pica");
-    try compileShader("src/test_shaders/control_flow.spv", "src/test_shaders/control_flow.v.pica");
+    try compileShader("src/test_shaders/simple.spv", "src/test_shaders/simple.v.pica", "src/test_shaders/simple.shbin");
+    try compileShader("src/test_shaders/math.spv", "src/test_shaders/math.v.pica", "src/test_shaders/math.shbin");
+    try compileShader("src/test_shaders/control_flow.spv", "src/test_shaders/control_flow.v.pica", "src/test_shaders/control_flow.shbin");
 }

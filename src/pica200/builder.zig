@@ -530,7 +530,7 @@ pub const Builder = struct {
             .Input => std.fmt.allocPrint(self.allocator.allocator(), "v{}", .{decoration_props.?.location}),
             .Output => blk: {
                 if (decoration_props.?.position) {
-                    try self.outputs.printLine(".out outpos0 position", .{});
+                    try self.outputs.printLine(".out outpos position", .{});
                     break :blk "outpos";
                 } else if (decoration_props.?.has_location) {
                     const location = decoration_props.?.location;

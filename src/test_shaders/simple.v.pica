@@ -7,7 +7,7 @@
 .constf const30(5e-1, 5e-1, 5e-1, 5e-1)
 .constf const41.xy(5e-1, 5e-1, 0e0, 0e0)
 
-.out outpos0 position
+.out outpos position
 .out outtexcoord0 texcoord0
 
 .proc main

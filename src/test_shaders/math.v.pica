@@ -7,7 +7,7 @@
 .constf const47(1e0, 1e0, 1e0, 1e0)
 .constf const59.xyz(7.076585e1, 7.076585e1, 7.076585e1, 0e0)
 
-.out outpos0 position
+.out outpos position
 
 .proc main
 label5:
