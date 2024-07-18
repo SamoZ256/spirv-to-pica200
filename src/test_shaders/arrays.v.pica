@@ -1,0 +1,25 @@
+.fvec uniform0
+
+.constf zeros(0.0, 0.0, 0.0, 0.0)
+.constf ones(1.0, 1.0, 1.0, 1.0)
+.constf const48(1e0, 1e0, 1e0, 1e0)
+
+.out outpos position
+
+.proc main
+label5:
+    mov r0.x, uniform0[1].x
+    add r1.x, uniform0[0].x, r0.x
+    add r2.x, uniform0[2].x, r1.x
+    add r3.x, uniform0[3].x, r2.x
+    add r4.x, uniform0[4].x, r3.x
+    add r5.x, uniform0[5].x, r4.x
+    add r6.x, uniform0[6].x, r5.x
+    add r7.x, uniform0[7].x, r6.x
+    mov r8.x, v0.x
+    mov r8.y, v0.y
+    mov r8.z, r7.x
+    mov r8.w, const48.x
+    mov outpos, r8
+.end
+

@@ -143,7 +143,7 @@ pub const Type = struct {
 
 pub const Value = struct {
     name: []const u8,
-    ty: Type, // HACK: this should be *const Type
+    ty: Type,
     component_indices: [4]i8,
     constant: ?Constant,
     is_uniform: bool,

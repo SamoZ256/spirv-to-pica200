@@ -28,10 +28,10 @@ pub const Translator = struct {
     spirv_reader: spirv.reader.Reader,
     pica200_builder: pica200.builder.Builder,
 
-    pub fn init(allocator: std.mem.Allocator, spv: []const u32) Translator {
+    pub fn init(allocator: std.mem.Allocator, spv: []const u32) !Translator {
         var self: Translator = undefined;
         self.spirv_reader = spirv.reader.Reader.init(spv);
-        self.pica200_builder = pica200.builder.Builder.init(allocator);
+        self.pica200_builder = try pica200.builder.Builder.init(allocator);
 
         return self;
     }

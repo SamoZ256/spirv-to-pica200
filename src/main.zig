@@ -14,7 +14,7 @@ fn compileShaderImpl(allocator: std.mem.Allocator, source_filename: []const u8, 
     const spv = @as([*]const u32, @ptrCast(@alignCast(buffer.ptr)))[0..spv_len];
 
     // Translate to PICA200 assembly
-    var translatr = translator.Translator.init(allocator, spv);
+    var translatr = try translator.Translator.init(allocator, spv);
     errdefer translatr.deinit();
 
     var output = std.ArrayList(u8).init(allocator);
@@ -77,4 +77,5 @@ pub fn main() !void {
     try compileShader("src/test_shaders/simple.spv", "src/test_shaders/simple.v.pica", "src/test_shaders/simple.shbin");
     try compileShader("src/test_shaders/math.spv", "src/test_shaders/math.v.pica", "src/test_shaders/math.shbin");
     try compileShader("src/test_shaders/control_flow.spv", "src/test_shaders/control_flow.v.pica", "src/test_shaders/control_flow.shbin");
+    try compileShader("src/test_shaders/arrays.spv", "src/test_shaders/arrays.v.pica", "src/test_shaders/arrays.shbin");
 }

@@ -1,35 +1,27 @@
 ; SPIR-V
 ; Version: 1.0
-; Generator: Khronos Glslang Reference Front End; 11
+; Generator: Google Shaderc over Glslang; 10
 ; Bound: 44
 ; Schema: 0
                OpCapability Shader
           %1 = OpExtInstImport "GLSL.std.450"
                OpMemoryModel Logical GLSL450
-               OpEntryPoint Vertex %main "main" %_ %a_position
-               OpSource GLSL 450
-               OpName %main "main"
-               OpName %u_seed "u_seed"
-               OpName %gl_PerVertex "gl_PerVertex"
-               OpMemberName %gl_PerVertex 0 "gl_Position"
-               OpMemberName %gl_PerVertex 1 "gl_PointSize"
-               OpMemberName %gl_PerVertex 2 "gl_ClipDistance"
-               OpMemberName %gl_PerVertex 3 "gl_CullDistance"
-               OpName %_ ""
-               OpName %a_position "a_position"
-               OpDecorate %u_seed Location 0
-               OpMemberDecorate %gl_PerVertex 0 BuiltIn Position
-               OpMemberDecorate %gl_PerVertex 1 BuiltIn PointSize
-               OpMemberDecorate %gl_PerVertex 2 BuiltIn ClipDistance
-               OpMemberDecorate %gl_PerVertex 3 BuiltIn CullDistance
-               OpDecorate %gl_PerVertex Block
-               OpDecorate %a_position Location 0
+               OpEntryPoint Vertex %4 "main" %26 %31 %gl_VertexID %gl_InstanceID
+               OpDecorate %11 Location 0
+               OpMemberDecorate %_struct_24 0 BuiltIn Position
+               OpMemberDecorate %_struct_24 1 BuiltIn PointSize
+               OpMemberDecorate %_struct_24 2 BuiltIn ClipDistance
+               OpMemberDecorate %_struct_24 3 BuiltIn CullDistance
+               OpDecorate %_struct_24 Block
+               OpDecorate %31 Location 0
+               OpDecorate %gl_VertexID BuiltIn VertexId
+               OpDecorate %gl_InstanceID BuiltIn InstanceId
        %void = OpTypeVoid
           %3 = OpTypeFunction %void
       %float = OpTypeFloat 32
     %float_0 = OpConstant %float 0
 %_ptr_UniformConstant_float = OpTypePointer UniformConstant %float
-     %u_seed = OpVariable %_ptr_UniformConstant_float UniformConstant
+         %11 = OpVariable %_ptr_UniformConstant_float UniformConstant
        %bool = OpTypeBool
     %float_1 = OpConstant %float 1
    %float_n1 = OpConstant %float -1
@@ -37,27 +29,28 @@
        %uint = OpTypeInt 32 0
      %uint_1 = OpConstant %uint 1
 %_arr_float_uint_1 = OpTypeArray %float %uint_1
-%gl_PerVertex = OpTypeStruct %v4float %float %_arr_float_uint_1 %_arr_float_uint_1
-%_ptr_Output_gl_PerVertex = OpTypePointer Output %gl_PerVertex
-          %_ = OpVariable %_ptr_Output_gl_PerVertex Output
+ %_struct_24 = OpTypeStruct %v4float %float %_arr_float_uint_1 %_arr_float_uint_1
+%_ptr_Output__struct_24 = OpTypePointer Output %_struct_24
+         %26 = OpVariable %_ptr_Output__struct_24 Output
         %int = OpTypeInt 32 1
       %int_0 = OpConstant %int 0
     %v2float = OpTypeVector %float 2
 %_ptr_Input_v2float = OpTypePointer Input %v2float
- %a_position = OpVariable %_ptr_Input_v2float Input
+         %31 = OpVariable %_ptr_Input_v2float Input
 %_ptr_Output_v4float = OpTypePointer Output %v4float
-       %main = OpFunction %void None %3
+%_ptr_Input_int = OpTypePointer Input %int
+%gl_VertexID = OpVariable %_ptr_Input_int Input
+%gl_InstanceID = OpVariable %_ptr_Input_int Input
+          %4 = OpFunction %void None %3
           %5 = OpLabel
-         %12 = OpLoad %float %u_seed
+         %12 = OpLoad %float %11
          %14 = OpFOrdGreaterThan %bool %12 %float_0
-               OpBranch %16
-         %16 = OpLabel
          %43 = OpSelect %float %14 %float_1 %float_n1
-         %32 = OpLoad %v2float %a_position
+         %32 = OpLoad %v2float %31
          %34 = OpCompositeExtract %float %32 0
          %35 = OpCompositeExtract %float %32 1
          %36 = OpCompositeConstruct %v4float %34 %35 %43 %float_1
-         %38 = OpAccessChain %_ptr_Output_v4float %_ %int_0
+         %38 = OpAccessChain %_ptr_Output_v4float %26 %int_0
                OpStore %38 %36
                OpReturn
                OpFunctionEnd

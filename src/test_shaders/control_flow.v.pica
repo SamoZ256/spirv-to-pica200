@@ -13,8 +13,6 @@ label5:
     mov r0.x, const9.x
     cmp uniform0.x, gt, gt, r0.x
     mov r1.x, cmp.xy
-    jmpc ones.x, label16
-label16:
     slt r2.x, zeros, -r1.x
     mul r2.x, const17.x
     add r3.x, -ones, r1.x

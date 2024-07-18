@@ -19,12 +19,16 @@ pub const Builder = struct {
     // HACK
     register_counter: u32,
 
-    pub fn init(allocator: std.mem.Allocator) Builder {
+    pub fn init(allocator: std.mem.Allocator) !Builder {
         var self: Builder = undefined;
         self.allocator = std.heap.ArenaAllocator.init(allocator);
         self.fba = std.heap.FixedBufferAllocator.init(&self.buffer);
         self.id_map = std.AutoHashMap(u32, base.Value).init(allocator);
         self.type_map = std.AutoHashMap(u32, base.Type).init(allocator);
+        // Allocate enough space for the all the types
+        try self.type_map.ensureTotalCapacity(512);
+        // Lock the pointers so that we can safely store them in the Ty structure as *const Type
+        self.type_map.lockPointers();
         self.decoration_map = std.AutoHashMap(u32, base.DecorationProperties).init(allocator);
 
         // HACK
@@ -96,7 +100,8 @@ pub const Builder = struct {
         if (!src2.canBeSrc2()) {
             if (!src1.canBeSrc2()) {
                 // If neither can be src2, create a temporary register
-                const tmp = base.Value.init(try self.getAvailableRegisterName(1), src2.ty);
+                var tmp = base.Value.init(try self.getAvailableRegisterName(1), src2.ty);
+                tmp.component_indices = src2.component_indices;
                 _ = try self.body.printLine("mov {s}, {s}", .{try self.getValueName(&tmp), try self.getValueName(src2)});
                 src2.* = tmp;
 
@@ -135,58 +140,58 @@ pub const Builder = struct {
     }
 
     // Type instructions
-    pub fn createVoidType(self: *Builder, result: u32) !void {
-        try self.type_map.put(result, .{ .id = result, .ty = .{ .void = {} } });
+    pub fn createVoidType(self: *Builder, result: u32) void {
+        self.type_map.putAssumeCapacity(result, .{ .id = result, .ty = .{ .void = {} } });
     }
 
-    pub fn createBoolType(self: *Builder, result: u32) !void {
-        try self.type_map.put(result, .{ .id = result, .ty = .{ .bool = {} } });
+    pub fn createBoolType(self: *Builder, result: u32) void {
+        self.type_map.putAssumeCapacity(result, .{ .id = result, .ty = .{ .bool = {} } });
     }
 
-    pub fn createIntType(self: *Builder, result: u32, is_signed: bool) !void {
-        try self.type_map.put(result, .{ .id = result, .ty = .{ .int = .{ .is_signed = is_signed } } });
+    pub fn createIntType(self: *Builder, result: u32, is_signed: bool) void {
+        self.type_map.putAssumeCapacity(result, .{ .id = result, .ty = .{ .int = .{ .is_signed = is_signed } } });
     }
 
-    pub fn createFloatType(self: *Builder, result: u32) !void {
-        try self.type_map.put(result, .{ .id = result, .ty = .{ .float = {} } });
+    pub fn createFloatType(self: *Builder, result: u32) void {
+        self.type_map.putAssumeCapacity(result, .{ .id = result, .ty = .{ .float = {} } });
     }
 
-    pub fn createVectorType(self: *Builder, result: u32, component_type: u32, component_count: u32) !void {
-        const component_type_t = self.type_map.get(component_type);
-        if (component_type_t) |*t| {
-            try self.type_map.put(result, .{ .id = result, .ty = .{ .vector = .{ .component_type = t, .component_count = component_count } } });
+    pub fn createVectorType(self: *Builder, result: u32, component_type: u32, component_count: u32) void {
+        const component_type_t = self.type_map.getPtr(component_type);
+        if (component_type_t) |t| {
+            self.type_map.putAssumeCapacity(result, .{ .id = result, .ty = .{ .vector = .{ .component_type = t, .component_count = component_count } } });
         }
     }
 
-    pub fn createMatrixType(self: *Builder, result: u32, column_type: u32, column_count: u32) !void {
-        const column_type_t = self.type_map.get(column_type);
-        if (column_type_t) |*t| {
-            try self.type_map.put(result, .{ .id = result, .ty = .{ .matrix = .{ .column_type = t, .column_count = column_count } } });
+    pub fn createMatrixType(self: *Builder, result: u32, column_type: u32, column_count: u32) void {
+        const column_type_t = self.type_map.getPtr(column_type);
+        if (column_type_t) |t| {
+            self.type_map.putAssumeCapacity(result, .{ .id = result, .ty = .{ .matrix = .{ .column_type = t, .column_count = column_count } } });
         }
     }
 
-    pub fn createArrayType(self: *Builder, result: u32, element_type: u32, element_count: u32) !void {
-        const element_type_t = self.type_map.get(element_type);
-        if (element_type_t) |*t| {
-            try self.type_map.put(result, .{ .id = result, .ty = .{ .array = .{ .element_type = t, .element_count = element_count } } });
+    pub fn createArrayType(self: *Builder, result: u32, element_type: u32, element_count: u32) void {
+        const element_type_t = self.type_map.getPtr(element_type);
+        if (element_type_t) |t| {
+            self.type_map.putAssumeCapacity(result, .{ .id = result, .ty = .{ .array = .{ .element_type = t, .element_count = element_count } } });
         }
     }
 
     pub fn createStructType(self: *Builder, result: u32, member_types: []const u32) !void {
         var member_types_t = std.ArrayList(*const base.Type).init(self.allocator.allocator());
         for (member_types) |member_type| {
-            const member_type_t = self.type_map.get(member_type);
-            if (member_type_t) |*t| {
+            const member_type_t = self.type_map.getPtr(member_type);
+            if (member_type_t) |t| {
                 try member_types_t.append(t);
             }
         }
-        try self.type_map.put(result, .{ .id = result, .ty = .{ .structure = .{ .member_types = member_types_t.items } } });
+        self.type_map.putAssumeCapacity(result, .{ .id = result, .ty = .{ .structure = .{ .member_types = member_types_t.items } } });
     }
 
-    pub fn createPointerType(self: *Builder, result: u32, element_type: u32) !void {
+    pub fn createPointerType(self: *Builder, result: u32, element_type: u32) void {
         const element_type_t = self.type_map.get(element_type).?;
         // Just copy the type
-        try self.type_map.put(result, element_type_t);
+        self.type_map.putAssumeCapacity(result, element_type_t);
     }
 
     // Instructions

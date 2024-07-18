@@ -20,7 +20,7 @@ fn testShader(comptime shader_name: []const u8) !void {
 
     // Translate
     // TODO: use testing.allocator
-    var translatr = translator.Translator.init(allocator, spv);
+    var translatr = try translator.Translator.init(allocator, spv);
     errdefer translatr.deinit();
 
     // TODO: use testing.allocator
@@ -43,4 +43,8 @@ test "math" {
 
 test "control flow" {
     try testShader("control_flow");
+}
+
+test "arrays" {
+    try testShader("arrays");
 }
