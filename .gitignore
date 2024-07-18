@@ -1,3 +1,6 @@
 # Zig build system
 .zig-cache
 zig-out
+
+# Shader files
+*.shbin

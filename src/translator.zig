@@ -81,8 +81,8 @@ pub const Translator = struct {
             .OpCompositeConstruct => self.pica200_builder.createConstruct(instruction.result_id, instruction.result_type_id, instruction.operands),
             .OpSelect => self.pica200_builder.createSelect(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], instruction.operands[2]),
             // Math
-            .OpFAdd => self.pica200_builder.createAdd(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], false),
-            .OpFSub => self.pica200_builder.createAdd(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], true),
+            .OpFAdd => self.pica200_builder.createAdd(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], 0),
+            .OpFSub => self.pica200_builder.createAdd(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], 1),
             .OpFMul, .OpVectorTimesScalar => self.pica200_builder.createMul(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], false),
             .OpFDiv => self.pica200_builder.createMul(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], true),
             // Comparison

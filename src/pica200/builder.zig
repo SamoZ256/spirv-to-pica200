@@ -25,6 +25,17 @@ pub const ComparisonMode = enum {
             .GreaterEqual => "ge",
         };
     }
+
+    pub fn opposite(self: ComparisonMode) ComparisonMode {
+        return switch (self) {
+            .Equal => .NotEqual,
+            .NotEqual => .Equal,
+            .LessThan => .GreaterEqual,
+            .LessEqual => .GreaterThan,
+            .GreaterThan => .LessEqual,
+            .GreaterEqual => .LessThan,
+        };
+    }
 };
 
 pub const DecorationType = enum {
@@ -46,18 +57,12 @@ const DecorationProperties = struct {
     position: bool,
 };
 
-const ScalarType = enum {
-    Bool,
-    Int,
-    Uint,
-    Float,
-};
-
-const Constant = union(ScalarType) {
+const Constant = union(enum) {
     Bool: bool,
     Int: i32,
     Uint: u32,
     Float: f32,
+    VectorFloat: [4]f32,
 
     pub fn toIndex(self: Constant) u32 {
         return switch (self) {
@@ -86,18 +91,7 @@ fn getComponentStr(component: i8) []const u8 {
     };
 }
 
-const TypeId = enum {
-    Void,
-    Bool,
-    Int,
-    Float,
-    Vector,
-    Matrix,
-    Array,
-    Struct,
-};
-
-const Ty = union(TypeId) {
+const Ty = union(enum) {
     Void: void,
     Bool: void,
     Int: struct {
@@ -158,6 +152,7 @@ const Value = struct {
     ty: Type, // HACK: this should be *const Type
     component_indices: [4]i8,
     constant: ?Constant,
+    is_uniform: bool,
 
     pub fn init(name: []const u8, ty: Type) Value {
         var self: Value = undefined;
@@ -172,6 +167,7 @@ const Value = struct {
             }
         }
         self.constant = null;
+        self.is_uniform = false;
 
         return self;
     }
@@ -202,6 +198,10 @@ const Value = struct {
         }
 
         return try std.fmt.allocPrint(allocator, "{s}{s}", .{self.name, component_indices_str});
+    }
+
+    pub fn canBeSrc2(self: *const Value) bool {
+        return (self.constant == null and !self.is_uniform);
     }
 };
 
@@ -352,6 +352,26 @@ pub const Builder = struct {
         return value.getName(self.allocator.allocator());
     }
 
+    fn swapIfNeeded(self: *Builder, src1: *Value, src2: *Value) !bool {
+        if (!src2.canBeSrc2()) {
+            if (!src1.canBeSrc2()) {
+                // If neither can be src2, create a temporary register
+                const tmp = Value.init(try self.getAvailableRegisterName(1), src2.ty);
+                _ = try self.body.printLine("mov {s}, {s}", .{try self.getValueName(&tmp), try self.getValueName(src2)});
+                src2.* = tmp;
+
+                return false;
+            }
+            const tmp = src1.*;
+            src1.* = src2.*;
+            src2.* = tmp;
+
+            return true;
+        }
+
+        return false;
+    }
+
     // Decoration instructions
     pub fn createDecoration(self: *Builder, target_id: u32, decoration: Decoration) !void {
         const decoration_props = try self.decoration_map.getOrPut(target_id);
@@ -473,7 +493,7 @@ pub const Builder = struct {
     pub fn createConstantComposite(self: *Builder, result: u32, ty: u32, constituents: []const u32) !void {
         const type_v = self.type_map.get(ty).?;
 
-        const values: [4]f32 = switch (type_v.ty) {
+        const constant: Constant = switch (type_v.ty) {
             .Vector => |vector| blk: {
                 var values: [4]f32 = undefined;
                 for (0..4) |i| {
@@ -483,15 +503,21 @@ pub const Builder = struct {
                         values[i] = 0.0;
                     }
                 }
-                break :blk values;
+                break :blk .{ .VectorFloat = values };
             },
             else => std.debug.panic("unsupported constant composite type\n", .{}),
         };
 
         var value = Value.init(try std.fmt.allocPrint(self.allocator.allocator(), "const{}", .{result}), type_v);
+        value.constant = constant;
         try self.id_map.put(result, value);
 
-        try self.constants.printLine(".constf {s}({}, {}, {}, {})", .{try self.getValueName(&value), values[0], values[1], values[2], values[3]});
+        switch (constant) {
+            .VectorFloat => |vector| {
+                try self.constants.printLine(".constf {s}({}, {}, {}, {})", .{value.name, vector[0], vector[1], vector[2], vector[3]});
+            },
+            else => unreachable,
+        }
     }
 
     pub fn createVariable(self: *Builder, result: u32, ty: u32, storage_class: StorageClass) !void {
@@ -547,12 +573,15 @@ pub const Builder = struct {
             .Function => try self.getAvailableRegisterName(type_v.ty.getRegisterCount()),
         };
 
-        const value = Value.init(name, type_v);
-        try self.id_map.put(result, value);
+        var value = Value.init(name, type_v);
         switch (storage_class) {
-            .Uniform => try self.uniforms.printLine(".fvec {s}", .{value.name}),
+            .Uniform => {
+                value.is_uniform = true;
+                try self.uniforms.printLine(".fvec {s}", .{value.name});
+            },
             else => {},
         }
+        try self.id_map.put(result, value);
     }
 
     pub fn createNop(self: *Builder) !void {
@@ -653,24 +682,32 @@ pub const Builder = struct {
         try self.body.printLine("add {s}, {s}, {s}", .{try self.getValueName(&value), try self.getValueName(&value), try self.getValueName(&temp2_v)});
     }
 
-    pub fn createAdd(self: *Builder, result: u32, ty: u32, lhs: u32, rhs: u32, negate: bool) !void {
+    // negate can have 3 possible values: -1 => negate lhs, 0 => don't negate, 1 => negate rhs
+    pub fn createAdd(self: *Builder, result: u32, ty: u32, lhs: u32, rhs: u32, negate: i8) !void {
         const type_v = self.type_map.get(ty).?;
 
-        const lhs_v = self.id_map.get(lhs).?;
-        const rhs_v = self.id_map.get(rhs).?;
+        var lhs_v = self.id_map.get(lhs).?;
+        var rhs_v = self.id_map.get(rhs).?;
+        var neg = negate;
+        if (try self.swapIfNeeded(&lhs_v, &rhs_v)) {
+            neg = -neg;
+        }
+
         const value = Value.init(try self.getAvailableRegisterName(type_v.ty.getRegisterCount()), type_v);
         try self.id_map.put(result, value);
 
-        const negate_str = if (negate) "-" else "";
+        const negate1_str = if (neg == -1) "-" else "";
+        const negate2_str = if (neg ==  1) "-" else "";
         // TODO: check how many components the vector has
-        try self.body.printLine("add {s}, {s}, {s}{s}", .{try self.getValueName(&value), try self.getValueName(&lhs_v), negate_str, try self.getValueName(&rhs_v)});
+        try self.body.printLine("add {s}, {s}{s}, {s}{s}", .{try self.getValueName(&value), negate1_str, try self.getValueName(&lhs_v), negate2_str, try self.getValueName(&rhs_v)});
     }
 
     pub fn createMul(self: *Builder, result: u32, ty: u32, lhs: u32, rhs: u32, invert: bool) !void {
         const type_v = self.type_map.get(ty).?;
 
-        const lhs_v = self.id_map.get(lhs).?;
-        var rhs_v = &self.id_map.get(rhs).?;
+        var lhs_v = self.id_map.get(lhs).?;
+        var rhs_v = self.id_map.get(rhs).?;
+        _ = try self.swapIfNeeded(&lhs_v, &rhs_v);
         const value = Value.init(try self.getAvailableRegisterName(type_v.ty.getRegisterCount()), type_v);
         try self.id_map.put(result, value);
 
@@ -679,25 +716,30 @@ pub const Builder = struct {
             // TODO: check how many components
             for (0..4) |i| {
                 const index_v = self.indexToValue(@intCast(i), false);
-                try self.body.printLine("rcp {s}, {s}", .{try self.getValueName(&try new_rhs_v.indexInto(self.allocator.allocator(), index_v)), try self.getValueName(rhs_v)});
+                try self.body.printLine("rcp {s}, {s}", .{try self.getValueName(&try new_rhs_v.indexInto(self.allocator.allocator(), index_v)), try self.getValueName(&rhs_v)});
             }
-            rhs_v = &new_rhs_v;
+            rhs_v = new_rhs_v;
         }
-        try self.body.printLine("mul {s}, {s}, {s}", .{try self.getValueName(&value), try self.getValueName(&lhs_v), try self.getValueName(rhs_v)});
+        try self.body.printLine("mul {s}, {s}, {s}", .{try self.getValueName(&value), try self.getValueName(&lhs_v), try self.getValueName(&rhs_v)});
     }
 
     pub fn createCmp(self: *Builder, result: u32, ty: u32, lhs: u32, rhs: u32, cmp_mode: ComparisonMode) !void {
         const type_v = self.type_map.get(ty).?;
 
-        const lhs_v = self.id_map.get(lhs).?;
-        const rhs_v = self.id_map.get(rhs).?;
+        var lhs_v = self.id_map.get(lhs).?;
+        var rhs_v = self.id_map.get(rhs).?;
+        var c_mode = cmp_mode;
+        if (try self.swapIfNeeded(&lhs_v, &rhs_v)) {
+            c_mode = c_mode.opposite();
+        }
         const value = Value.init(try self.getAvailableRegisterName(type_v.ty.getRegisterCount()), type_v);
         try self.id_map.put(result, value);
 
-        const cmp_str = cmp_mode.toStr();
+        const cmp_str = c_mode.toStr();
         //const cmp2_str = cmp_modes[1].toStr();
         try self.body.printLine("cmp {s}, {s}, {s}, {s}", .{try self.getValueName(&lhs_v), cmp_str, cmp_str, try self.getValueName(&rhs_v)});
         // TODO: index into value with .xy
+        // TODO: fix "error: invalid register: cmp"
         try self.body.printLine("mov {s}, cmp.xy", .{try self.getValueName(&value)});
     }
 

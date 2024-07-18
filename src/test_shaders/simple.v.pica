@@ -5,7 +5,7 @@
 .constf const20(0e0, 0e0, 0e0, 0e0)
 .constf const21(1e0, 1e0, 1e0, 1e0)
 .constf const30(5e-1, 5e-1, 5e-1, 5e-1)
-.constf const41.xy(5e-1, 5e-1, 0e0, 0e0)
+.constf const41(5e-1, 5e-1, 0e0, 0e0)
 
 .out outpos position
 .out outtexcoord0 texcoord0
@@ -17,9 +17,9 @@ label5:
     mov r0.z, const20.x
     mov r0.w, const21.x
     mov outpos, r0
-    mul r1.xy, v0.xy, const30.x
-    add r2.xy, r1.xy, const41.xy
-    add r3.xy, r2.xy, uniform1.xy
+    mul r1.xy, const30.x, v0.xy
+    add r2.xy, const41.xy, r1.xy
+    add r3.xy, uniform1.xy, r2.xy
     mov outtexcoord0.xy, r3.xy
 .end
 

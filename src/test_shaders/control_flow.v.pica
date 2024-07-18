@@ -10,20 +10,21 @@
 
 .proc main
 label5:
-    cmp uniform0.x, gt, gt, const9.x
-    mov r0.x, cmp.xy
+    mov r0.x, const9.x
+    cmp uniform0.x, gt, gt, r0.x
+    mov r1.x, cmp.xy
     jmpc ones.x, label16
 label16:
-    slt r1.x, zeros, -r0.x
-    mul r1.x, const17.x
-    add r2.x, -ones, r0.x
-    slt r3.x, zeros, r2.x
-    mul r3.x, const19.x
-    add r1.x, r1.x, r3.x
-    mov r4.x, v0.x
-    mov r4.y, v0.y
-    mov r4.z, r1.x
-    mov r4.w, const17.x
-    mov outpos, r4
+    slt r2.x, zeros, -r1.x
+    mul r2.x, const17.x
+    add r3.x, -ones, r1.x
+    slt r4.x, zeros, r3.x
+    mul r4.x, const19.x
+    add r2.x, r2.x, r4.x
+    mov r5.x, v0.x
+    mov r5.y, v0.y
+    mov r5.z, r2.x
+    mov r5.w, const17.x
+    mov outpos, r5
 .end
 
