@@ -41,7 +41,7 @@ pub const Translator = struct {
     }
 
     pub fn translate(self: *Translator, writer: anytype) !void {
-        self.pica200_builder.initWriters();
+        try self.pica200_builder.initWriters();
         _ = self.spirv_reader.readHeader();
         while (!self.spirv_reader.end()) {
             const instruction = self.spirv_reader.readInstruction();
@@ -79,10 +79,21 @@ pub const Translator = struct {
             .OpCompositeExtract => self.pica200_builder.createAccessChain(instruction.result_id, instruction.operands[0], instruction.operands[1..instruction.operands.len], false),
             .OpAccessChain => self.pica200_builder.createAccessChain(instruction.result_id, instruction.operands[0], instruction.operands[1..instruction.operands.len], true),
             .OpCompositeConstruct => self.pica200_builder.createConstruct(instruction.result_id, instruction.result_type_id, instruction.operands),
+            .OpSelect => self.pica200_builder.createSelect(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], instruction.operands[2]),
+            // Math
             .OpFAdd => self.pica200_builder.createAdd(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], false),
             .OpFSub => self.pica200_builder.createAdd(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], true),
             .OpFMul, .OpVectorTimesScalar => self.pica200_builder.createMul(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], false),
             .OpFDiv => self.pica200_builder.createMul(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], true),
+            // Comparison
+            .OpFOrdEqual => self.pica200_builder.createCmp(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], .Equal),
+            .OpFOrdNotEqual => self.pica200_builder.createCmp(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], .NotEqual),
+            .OpFOrdLessThan => self.pica200_builder.createCmp(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], .LessThan),
+            .OpFOrdLessThanEqual => self.pica200_builder.createCmp(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], .LessEqual),
+            .OpFOrdGreaterThan => self.pica200_builder.createCmp(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], .GreaterThan),
+            .OpFOrdGreaterThanEqual => self.pica200_builder.createCmp(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], .GreaterEqual),
+            // Branches
+            .OpBranch => self.pica200_builder.createBranch(instruction.operands[0]),
             // Ignored
             .OpCapability => {},
             .OpExtInstImport => {},

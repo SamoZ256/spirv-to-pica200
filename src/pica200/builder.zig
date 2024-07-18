@@ -7,6 +7,26 @@ pub const StorageClass = enum {
     Uniform,
 };
 
+pub const ComparisonMode = enum {
+    Equal,
+    NotEqual,
+    LessThan,
+    LessEqual,
+    GreaterThan,
+    GreaterEqual,
+
+    pub fn toStr(self: ComparisonMode) []const u8 {
+        return switch (self) {
+            .Equal => "eq",
+            .NotEqual => "ne",
+            .LessThan => "lt",
+            .LessEqual => "le",
+            .GreaterThan => "gt",
+            .GreaterEqual => "ge",
+        };
+    }
+};
+
 pub const DecorationType = enum {
     None,
     Location,
@@ -284,11 +304,14 @@ pub const Builder = struct {
         return self;
     }
 
-    pub fn initWriters(self: *Builder) void {
+    pub fn initWriters(self: *Builder) !void {
         self.uniforms = Writer.init(self.fba.allocator());
         self.constants = Writer.init(self.fba.allocator());
         self.outputs = Writer.init(self.fba.allocator());
         self.body = Writer.init(self.fba.allocator());
+
+        // Constants
+        try self.constants.printLine(".constf ones(1.0, 1.0, 1.0, 1.0)", .{});
     }
 
     pub fn deinitWriters(self: *Builder) void {
@@ -440,7 +463,7 @@ pub const Builder = struct {
 
         // Only float constants can be used in the code
         switch (constant) {
-            .Float => |f| try self.constants.printLine(".constf {s}({}, {}, {}, {})", .{try self.getValueName(&value), f, f, f, f}),
+            .Float => |f| try self.constants.printLine(".constf {s}({}, {}, {}, {})", .{value.name, f, f, f, f}),
             else => {},
         }
     }
@@ -523,10 +546,10 @@ pub const Builder = struct {
             .Function => try self.getAvailableRegisterName(type_v.ty.getRegisterCount()),
         };
 
-        var value = Value.init(name, type_v);
+        const value = Value.init(name, type_v);
         try self.id_map.put(result, value);
         switch (storage_class) {
-            .Uniform => try self.uniforms.printLine(".fvec {s}", .{try self.getValueName(&value)}),
+            .Uniform => try self.uniforms.printLine(".fvec {s}", .{value.name}),
             else => {},
         }
     }
@@ -605,6 +628,30 @@ pub const Builder = struct {
         try self.id_map.put(result, value);
     }
 
+    // TODO: optimize this
+    pub fn createSelect(self: *Builder, result: u32, ty: u32, cond: u32, a: u32, b: u32) !void {
+        const type_v = self.type_map.get(ty).?;
+
+        const cond_v = self.id_map.get(cond).?;
+        const a_v = self.id_map.get(a).?;
+        const b_v = self.id_map.get(b).?;
+        const value = Value.init(try self.getAvailableRegisterName(type_v.ty.getRegisterCount()), type_v);
+        try self.id_map.put(result, value);
+
+        // If true
+        try self.body.printLine("slt {s}, zeros, -{s}", .{try self.getValueName(&value), try self.getValueName(&cond_v)});
+        try self.body.printLine("mul {s}, {s}", .{try self.getValueName(&value), try self.getValueName(&a_v)});
+
+        // If false
+        const temp1_v = Value.init(try self.getAvailableRegisterName(type_v.ty.getRegisterCount()), type_v);
+        const temp2_v = Value.init(try self.getAvailableRegisterName(type_v.ty.getRegisterCount()), type_v);
+        // Subtract 1 from the condition so that it is 0 if true and -1 if false and therefore can be used with slt
+        try self.body.printLine("add {s}, -ones, {s}", .{try self.getValueName(&temp1_v), try self.getValueName(&cond_v)});
+        try self.body.printLine("slt {s}, zeros, {s}", .{try self.getValueName(&temp2_v), try self.getValueName(&temp1_v)});
+        try self.body.printLine("mul {s}, {s}", .{try self.getValueName(&temp2_v), try self.getValueName(&b_v)});
+        try self.body.printLine("add {s}, {s}, {s}", .{try self.getValueName(&value), try self.getValueName(&value), try self.getValueName(&temp2_v)});
+    }
+
     pub fn createAdd(self: *Builder, result: u32, ty: u32, lhs: u32, rhs: u32, negate: bool) !void {
         const type_v = self.type_map.get(ty).?;
 
@@ -637,4 +684,26 @@ pub const Builder = struct {
         }
         try self.body.printLine("mul {s}, {s}, {s}", .{try self.getValueName(&value), try self.getValueName(&lhs_v), try self.getValueName(rhs_v)});
     }
+
+    pub fn createCmp(self: *Builder, result: u32, ty: u32, lhs: u32, rhs: u32, cmp_mode: ComparisonMode) !void {
+        const type_v = self.type_map.get(ty).?;
+
+        const lhs_v = self.id_map.get(lhs).?;
+        const rhs_v = self.id_map.get(rhs).?;
+        const value = Value.init(try self.getAvailableRegisterName(type_v.ty.getRegisterCount()), type_v);
+        try self.id_map.put(result, value);
+
+        const cmp_str = cmp_mode.toStr();
+        //const cmp2_str = cmp_modes[1].toStr();
+        try self.body.printLine("cmp {s}, {s}, {s}, {s}", .{try self.getValueName(&lhs_v), cmp_str, cmp_str, try self.getValueName(&rhs_v)});
+        // TODO: index into value with .xy
+        try self.body.printLine("mov {s}, cmp.xy", .{try self.getValueName(&value)});
+    }
+
+    pub fn createBranch(self: *Builder, dst: u32) !void {
+        // TODO: check if this is correct
+        try self.body.printLine("jmpc ones.x, label{}", .{dst});
+    }
+
+    // TODO: implement other branch instructions
 };

@@ -1,0 +1,28 @@
+.fvec uniform0
+
+.constf ones(1.0, 1.0, 1.0, 1.0)
+.constf const9(0e0, 0e0, 0e0, 0e0)
+.constf const17(1e0, 1e0, 1e0, 1e0)
+.constf const19(-1e0, -1e0, -1e0, -1e0)
+
+.out outpos0 position
+
+.proc main
+label5:
+    cmp uniform0.x, gt, gt, const9.x
+    mov r0.x, cmp.xy
+    jmpc ones.x, label16
+label16:
+    slt r1.x, zeros, -r0.x
+    mul r1.x, const17.x
+    add r2.x, -ones, r0.x
+    slt r3.x, zeros, r2.x
+    mul r3.x, const19.x
+    add r1.x, r1.x, r3.x
+    mov r4.x, v0.x
+    mov r4.y, v0.y
+    mov r4.z, r1.x
+    mov r4.w, const17.x
+    mov outpos, r4
+.end
+

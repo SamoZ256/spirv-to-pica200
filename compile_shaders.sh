@@ -5,3 +5,4 @@ function compileShader {
 
 compileShader "simple"
 compileShader "math"
+compileShader "control_flow"

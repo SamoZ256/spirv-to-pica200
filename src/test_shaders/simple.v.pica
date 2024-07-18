@@ -1,8 +1,9 @@
-.fvec uniform1.xy
+.fvec uniform1
 
-.constf const20.x(0e0, 0e0, 0e0, 0e0)
-.constf const21.x(1e0, 1e0, 1e0, 1e0)
-.constf const30.x(5e-1, 5e-1, 5e-1, 5e-1)
+.constf ones(1.0, 1.0, 1.0, 1.0)
+.constf const20(0e0, 0e0, 0e0, 0e0)
+.constf const21(1e0, 1e0, 1e0, 1e0)
+.constf const30(5e-1, 5e-1, 5e-1, 5e-1)
 .constf const41.xy(5e-1, 5e-1, 0e0, 0e0)
 
 .out outpos0 position

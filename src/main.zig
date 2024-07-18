@@ -38,4 +38,5 @@ fn compileShader(source_filename: []const u8, output_filename: []const u8) !void
 pub fn main() !void {
     try compileShader("src/test_shaders/simple.spv", "src/test_shaders/simple.v.pica");
     try compileShader("src/test_shaders/math.spv", "src/test_shaders/math.v.pica");
+    try compileShader("src/test_shaders/control_flow.spv", "src/test_shaders/control_flow.v.pica");
 }

@@ -33,6 +33,14 @@ fn testShader(comptime shader_name: []const u8) !void {
     try testing.expectEqualStrings(expected, output.items);
 }
 
-test "simple shader" {
+test "simple" {
     try testShader("simple");
+}
+
+test "math" {
+    try testShader("math");
+}
+
+test "control flow" {
+    try testShader("control_flow");
 }
