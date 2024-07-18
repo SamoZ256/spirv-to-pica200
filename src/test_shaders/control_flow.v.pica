@@ -1,5 +1,6 @@
 .fvec uniform0
 
+.constf zeros(0.0, 0.0, 0.0, 0.0)
 .constf ones(1.0, 1.0, 1.0, 1.0)
 .constf const9(0e0, 0e0, 0e0, 0e0)
 .constf const17(1e0, 1e0, 1e0, 1e0)

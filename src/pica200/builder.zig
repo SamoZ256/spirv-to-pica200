@@ -311,6 +311,7 @@ pub const Builder = struct {
         self.body = Writer.init(self.fba.allocator());
 
         // Constants
+        try self.constants.printLine(".constf zeros(0.0, 0.0, 0.0, 0.0)", .{});
         try self.constants.printLine(".constf ones(1.0, 1.0, 1.0, 1.0)", .{});
     }
 
