@@ -4,7 +4,7 @@ This project aims to support the use of modern shading languages on Nintendo 3DS
 
 ## Usage
 
-Simply run `zig build run -- /path/to/input.vert -o /path/to/output.shbin`. This requires that you have [picasso]() installed and in your path. If you don't have it installed or want to output assembly instead of a shader binary, you can use the `-S` flag (`zig build run -- -S /path/to/input.vert -o /path/to/output.v.pica`).
+Simply run `zig build run -- /path/to/input.vert -o /path/to/output.shbin`. This requires that you have [picasso](https://github.com/devkitPro/picasso/tree/master) installed and in your path. If you don't have it installed or want to output assembly instead of a shader binary, you can use the `-S` flag (`zig build run -- -S /path/to/input.vert -o /path/to/output.v.pica`).
 
 ## Mapping of inputs and outputs
 
@@ -50,7 +50,7 @@ void main() {
 ```
 
 SPIR-V disassembly (`glslc --target-env=opengl -O /path/to/file.vert -o /path/to/file.spv` and `spirv-dis /path/to/file.spv`):
-```spvasm
+```ll
 ; SPIR-V
 ; Version: 1.0
 ; Generator: Google Shaderc over Glslang; 10
@@ -115,7 +115,7 @@ SPIR-V disassembly (`glslc --target-env=opengl -O /path/to/file.vert -o /path/to
 ```
 
 PICA200 assembly:
-```spvasm
+```ll
 .fvec uniform1
 
 .constf zeros(0.0, 0.0, 0.0, 0.0)
