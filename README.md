@@ -50,7 +50,7 @@ void main() {
 ```
 
 SPIR-V disassembly (`glslc --target-env=opengl -O /path/to/file.vert -o /path/to/file.spv` and `spirv-dis /path/to/file.spv`):
-```ll
+```c
 ; SPIR-V
 ; Version: 1.0
 ; Generator: Google Shaderc over Glslang; 10
@@ -115,7 +115,7 @@ SPIR-V disassembly (`glslc --target-env=opengl -O /path/to/file.vert -o /path/to
 ```
 
 PICA200 assembly:
-```ll
+```c
 .fvec uniform1
 
 .constf zeros(0.0, 0.0, 0.0, 0.0)
