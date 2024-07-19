@@ -59,6 +59,10 @@ pub fn build(b: *std.Build) void {
     //exe.root_module.addImport("spirv_tools", spirv_tools.module("spirv_opt"));
     //exe.linkLibrary(spirv_tools.artifact("spirv_tools"));
 
+    // Clap
+    const clap = b.dependency("clap", .{});
+    exe.root_module.addImport("clap", clap.module("clap"));
+
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
     // step when running `zig build`).

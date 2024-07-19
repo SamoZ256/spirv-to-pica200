@@ -1,4 +1,5 @@
 const std = @import("std");
+const clap = @import("clap");
 const translator = @import("translator.zig");
 
 fn compileShaderImpl(allocator: std.mem.Allocator, source_filename: []const u8, output_filename: []const u8) !void {
@@ -23,34 +24,17 @@ fn compileShaderImpl(allocator: std.mem.Allocator, source_filename: []const u8, 
     try translatr.translate(output.writer());
 
     // Write to file
-    // TODO: why does it want c_uint instead of .write_only?
-    var output_file = try std.fs.cwd().createFile(output_filename, .{ .mode = 1 });
+    var output_file = try std.fs.cwd().createFile(output_filename, .{});
     errdefer output_file.close();
 
     _ = try output_file.write(output.items);
 }
 
-fn compileShader(source_filename: []const u8, output_filename: []const u8, assembled_output_filename: []const u8) !void {
-    // Allocator
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    errdefer _ = gpa.deinit();
-    const allocator = gpa.allocator();
-
+fn compileShader(allocator: std.mem.Allocator, source_filename: []const u8, output_filename: []const u8, assembled_output_filename: []const u8, assembly: bool) !void {
     try compileShaderImpl(allocator, source_filename, output_filename);
 
-    // Assemble the output (if enabled)
-    const args = try std.process.argsAlloc(allocator);
-    defer std.process.argsFree(allocator, args);
-
-    var assemble = false;
-    for (1..args.len) |i| {
-        if (std.mem.eql(u8, args[i], "--assemble")) {
-            assemble = true;
-        }
-    }
-
     // Execute picasso assembler
-    if (assemble) {
+    if (!assembly) {
         const command = try std.fmt.allocPrint(allocator, "picasso {s} -o {s}", .{output_filename, assembled_output_filename});
         errdefer allocator.free(command);
 
@@ -74,8 +58,60 @@ fn compileShader(source_filename: []const u8, output_filename: []const u8, assem
 }
 
 pub fn main() !void {
-    try compileShader("src/test_shaders/simple.spv", "src/test_shaders/simple.v.pica", "src/test_shaders/simple.shbin");
-    try compileShader("src/test_shaders/math.spv", "src/test_shaders/math.v.pica", "src/test_shaders/math.shbin");
-    try compileShader("src/test_shaders/control_flow.spv", "src/test_shaders/control_flow.v.pica", "src/test_shaders/control_flow.shbin");
-    try compileShader("src/test_shaders/arrays.spv", "src/test_shaders/arrays.v.pica", "src/test_shaders/arrays.shbin");
+    // Allocator
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    errdefer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const params = comptime clap.parseParamsComptime(
+        \\-h, --help             Display this help and exit.
+        \\-o, --output <str>     The output file.
+        \\-S, --assembly         Output assembly instead of shader binary.
+        \\-t, --test-shaders             Compile test shaders.
+        \\<str>
+        \\
+    );
+
+    var diag = clap.Diagnostic{};
+    var res = clap.parse(clap.Help, &params, clap.parsers.default, .{
+        .diagnostic = &diag,
+        .allocator = gpa.allocator(),
+    }) catch |err| {
+        diag.report(std.io.getStdErr().writer(), err) catch {};
+        return err;
+    };
+    errdefer res.deinit();
+
+    if (res.args.help != 0) {
+        return clap.help(std.io.getStdErr().writer(), clap.Help, &params, .{});
+    }
+
+    if (res.args.@"test-shaders" != 0) {
+        try compileShader(allocator, "src/test_shaders/simple.spv", "src/test_shaders/simple.v.pica", "src/test_shaders/simple.shbin", res.args.assembly != 0);
+        try compileShader(allocator, "src/test_shaders/math.spv", "src/test_shaders/math.v.pica", "src/test_shaders/math.shbin", res.args.assembly != 0);
+        try compileShader(allocator, "src/test_shaders/control_flow.spv", "src/test_shaders/control_flow.v.pica", "src/test_shaders/control_flow.shbin", res.args.assembly != 0);
+        try compileShader(allocator, "src/test_shaders/arrays.spv", "src/test_shaders/arrays.v.pica", "src/test_shaders/arrays.shbin", res.args.assembly != 0);
+    } else {
+        var output1_filename = res.args.output.?;
+        var output2_filename = res.args.output.?;
+        if (res.args.assembly != 0) {
+            output2_filename = "";
+        } else {
+            output1_filename = ".temp/temp.v.pica";
+
+            // Ensure the temo directory exists
+            std.fs.cwd().makeDir(".temp") catch |e| {
+                switch (e) {
+                    error.PathAlreadyExists => {},
+                    else => return e,
+                }
+            };
+        }
+        try compileShader(allocator, res.positionals[0], output1_filename, output2_filename, res.args.assembly != 0);
+
+        if (res.args.assembly == 0) {
+            // Delete the temporary file
+            try std.fs.cwd().deleteFile(".temp/temp.v.pica");
+        }
+    }
 }

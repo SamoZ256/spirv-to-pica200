@@ -56,6 +56,7 @@ pub const Builder = struct {
     }
 
     pub fn deinit(self: *Builder) void {
+        self.type_map.unlockPointers();
         self.decoration_map.deinit();
         self.type_map.deinit();
         self.id_map.deinit();
