@@ -1,0 +1,58 @@
+.fvec uniform0
+.fvec uniform1
+.fvec uniform2
+
+.constf const1(0.0, 1.0, 0.0174532925, 57.295779513)
+.alias zeros const1.xxxx
+.alias ones const1.yyyy
+.alias deg_to_rad const1.zzzz
+.alias rad_to_deg const1.wwww
+.constf const84(1e0, 1e0, 1e0, 1e0)
+
+.out outpos position
+
+.proc main
+label5:
+    flr r0.x, uniform0.x
+    mov r2.x, uniform0.x
+    mul r1.x, deg_to_rad, r2.x
+    add r3.x, r0.x, r1.x
+    mov r5.x, uniform0.x
+    mul r4.x, rad_to_deg, r5.x
+    add r6.x, r3.x, r4.x
+    ex2 r7.x, uniform0.x
+    add r8.x, r6.x, r7.x
+    lg2 r9.x, uniform0.x
+    add r10.x, r8.x, r9.x
+    rsq r11.x, uniform0.x
+    rcp r11.x, r11.x
+    add r12.x, r10.x, r11.x
+    rsq r13.x, uniform0.x
+    add r14.x, r12.x, r13.x
+    mov r16.x, uniform1.x
+    min r15.x, uniform0.x, r16.x
+    add r17.x, r14.x, r15.x
+    mov r19.x, uniform1.x
+    max r18.x, uniform0.x, r19.x
+    add r20.x, r17.x, r18.x
+    mov r22.x, uniform1.x
+    max r21.x, uniform0.x, r22.x
+    min r21.x, uniform2.x, r21.x
+    add r23.x, r20.x, r21.x
+    mov r25.x, uniform1.x
+    add r26.x, ones, -uniform2.x
+    mul r24.x, uniform0.x, r26.x
+    mul r26.x, r25.x, uniform2.x
+    add r24.x, r24.x, r26.x
+    add r27.x, r23.x, r24.x
+    mov r29.x, uniform1.x
+    mul r28.x, uniform0.x, r29.x
+    min r28.x, uniform2.x, r28.x
+    add r30.x, r27.x, r28.x
+    mov r31.x, v0.x
+    mov r31.y, v0.y
+    mov r31.z, r30.x
+    mov r31.w, const84.x
+    mov outpos, r31
+.end
+

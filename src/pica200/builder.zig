@@ -44,8 +44,11 @@ pub const Builder = struct {
         self.body = writer.Writer.init(self.fba.allocator());
 
         // Constants
-        try self.constants.printLine(".constf zeros(0.0, 0.0, 0.0, 0.0)", .{});
-        try self.constants.printLine(".constf ones(1.0, 1.0, 1.0, 1.0)", .{});
+        try self.constants.printLine(".constf const1(0.0, 1.0, 0.0174532925, 57.295779513)", .{});
+        try self.constants.printLine(".alias zeros const1.xxxx", .{});
+        try self.constants.printLine(".alias ones const1.yyyy", .{});
+        try self.constants.printLine(".alias deg_to_rad const1.zzzz", .{});
+        try self.constants.printLine(".alias rad_to_deg const1.wwww", .{});
     }
 
     pub fn deinitWriters(self: *Builder) void {
@@ -484,4 +487,101 @@ pub const Builder = struct {
     }
 
     // TODO: implement other branch instructions
+
+    // TODO: implement some of the harder std functions as well
+    pub fn createStdCall(self: *Builder, result: u32, ty: u32, std_function: base.StdFunction, arguments: []const u32) !void {
+        const type_v = self.type_map.get(ty).?;
+        const value = base.Value.init(try self.getAvailableRegisterName(type_v.ty.getRegisterCount()), type_v);
+        try self.id_map.put(result, value);
+
+        switch (std_function) {
+            .floor => {
+                const arg_v = self.id_map.get(arguments[0]).?;
+                try self.body.printLine("flr {s}, {s}", .{try self.getValueName(&value), try self.getValueName(&arg_v)});
+            },
+            .radians => {
+                var arg_v = self.id_map.get(arguments[0]).?;
+                // TODO: move this into a utility function
+                if (!arg_v.canBeSrc2()) {
+                    const new_arg_v = base.Value.init(try self.getAvailableRegisterName(arg_v.ty.ty.getRegisterCount()), arg_v.ty);
+                    try self.body.printLine("mov {s}, {s}", .{try self.getValueName(&new_arg_v), try self.getValueName(&arg_v)});
+                    arg_v = new_arg_v;
+                }
+                try self.body.printLine("mul {s}, deg_to_rad, {s}", .{try self.getValueName(&value), try self.getValueName(&arg_v)});
+            },
+            .degrees => {
+                var arg_v = self.id_map.get(arguments[0]).?;
+                if (!arg_v.canBeSrc2()) {
+                    const new_arg_v = base.Value.init(try self.getAvailableRegisterName(arg_v.ty.ty.getRegisterCount()), arg_v.ty);
+                    try self.body.printLine("mov {s}, {s}", .{try self.getValueName(&new_arg_v), try self.getValueName(&arg_v)});
+                    arg_v = new_arg_v;
+                }
+                try self.body.printLine("mul {s}, rad_to_deg, {s}", .{try self.getValueName(&value), try self.getValueName(&arg_v)});
+            },
+            .exp2 => {
+                const arg_v = self.id_map.get(arguments[0]).?;
+                try self.body.printLine("ex2 {s}, {s}", .{try self.getValueName(&value), try self.getValueName(&arg_v)});
+            },
+            .log2 => {
+                const arg_v = self.id_map.get(arguments[0]).?;
+                try self.body.printLine("lg2 {s}, {s}", .{try self.getValueName(&value), try self.getValueName(&arg_v)});
+            },
+            .sqrt => {
+                const arg_v = self.id_map.get(arguments[0]).?;
+                try self.body.printLine("rsq {s}, {s}", .{try self.getValueName(&value), try self.getValueName(&arg_v)});
+                try self.body.printLine("rcp {s}, {s}", .{try self.getValueName(&value), try self.getValueName(&value)});
+            },
+            .inverse_sqrt => {
+                const arg_v = self.id_map.get(arguments[0]).?;
+                try self.body.printLine("rsq {s}, {s}", .{try self.getValueName(&value), try self.getValueName(&arg_v)});
+            },
+            .min => {
+                var arg1_v = self.id_map.get(arguments[0]).?;
+                var arg2_v = self.id_map.get(arguments[1]).?;
+                _ = try self.swapIfNeeded(&arg1_v, &arg2_v);
+                try self.body.printLine("min {s}, {s}, {s}", .{try self.getValueName(&value), try self.getValueName(&arg1_v), try self.getValueName(&arg2_v)});
+            },
+            .max => {
+                var arg1_v = self.id_map.get(arguments[0]).?;
+                var arg2_v = self.id_map.get(arguments[1]).?;
+                _ = try self.swapIfNeeded(&arg1_v, &arg2_v);
+                try self.body.printLine("max {s}, {s}, {s}", .{try self.getValueName(&value), try self.getValueName(&arg1_v), try self.getValueName(&arg2_v)});
+            },
+            .clamp => {
+                var arg1_v = self.id_map.get(arguments[0]).?;
+                var arg2_v = self.id_map.get(arguments[1]).?;
+                const arg3_v = self.id_map.get(arguments[2]).?;
+                _ = try self.swapIfNeeded(&arg1_v, &arg2_v);
+                try self.body.printLine("max {s}, {s}, {s}", .{try self.getValueName(&value), try self.getValueName(&arg1_v), try self.getValueName(&arg2_v)});
+                try self.body.printLine("min {s}, {s}, {s}", .{try self.getValueName(&value), try self.getValueName(&arg3_v), try self.getValueName(&value)});
+            },
+            .mix => {
+                var arg1_v = self.id_map.get(arguments[0]).?;
+                var arg2_v = self.id_map.get(arguments[1]).?;
+                const arg3_v = self.id_map.get(arguments[2]).?;
+                _ = try self.swapIfNeeded(&arg1_v, &arg2_v);
+                const temp = base.Value.init(try self.getAvailableRegisterName(type_v.ty.getRegisterCount()), type_v);
+
+                // value = arg1 * (1 - arg3)
+                try self.body.printLine("add {s}, ones, -{s}", .{try self.getValueName(&temp), try self.getValueName(&arg3_v)});
+                try self.body.printLine("mul {s}, {s}, {s}", .{try self.getValueName(&value), try self.getValueName(&arg1_v), try self.getValueName(&temp)});
+
+                // value = value + arg2 * arg3
+                try self.body.printLine("mul {s}, {s}, {s}", .{try self.getValueName(&temp), try self.getValueName(&arg2_v), try self.getValueName(&arg3_v)});
+                try self.body.printLine("add {s}, {s}, {s}", .{try self.getValueName(&value), try self.getValueName(&value), try self.getValueName(&temp)});
+            },
+            .fma => {
+                var arg1_v = self.id_map.get(arguments[0]).?;
+                var arg2_v = self.id_map.get(arguments[1]).?;
+                const arg3_v = self.id_map.get(arguments[2]).?;
+                _ = try self.swapIfNeeded(&arg1_v, &arg2_v);
+                try self.body.printLine("mul {s}, {s}, {s}", .{try self.getValueName(&value), try self.getValueName(&arg1_v), try self.getValueName(&arg2_v)});
+                try self.body.printLine("min {s}, {s}, {s}", .{try self.getValueName(&value), try self.getValueName(&arg3_v), try self.getValueName(&value)});
+            },
+            // TODO: implement the rest
+            else => {
+                try std.debug.panic("{} not implemented\n", .{std_function});
+            }
+        }
+    }
 };

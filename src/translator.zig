@@ -11,6 +11,58 @@ fn toPica200StorageClass(storage_class: spirv.headers.StorageClass) pica200.base
     };
 }
 
+fn toPica200StdFunction(std_function: u32) pica200.base.StdFunction {
+    return switch (std_function) {
+        1 => .round,
+        2 => .round_even,
+        3 => .trunc,
+        4 => .abs,
+        6 => .sign,
+        8 => .floor,
+        9 => .ceil,
+        10 => .fract,
+        11 => .radians,
+        12 => .degrees,
+        13 => .sin,
+        14 => .cos,
+        15 => .tan,
+        16 => .asin,
+        17 => .acos,
+        18 => .atan,
+        19 => .sinh,
+        20 => .cosh,
+        21 => .tanh,
+        22 => .asinh,
+        23 => .acosh,
+        24 => .atanh,
+        25 => .atan2,
+        26 => .pow,
+        27 => .exp,
+        28 => .log,
+        29 => .exp2,
+        30 => .log2,
+        31 => .sqrt,
+        32 => .inverse_sqrt,
+        33 => .determinant,
+        34 => .matrix_inverse,
+        37 => .min,
+        40 => .max,
+        43 => .clamp,
+        46 => .mix,
+        48 => .step,
+        49 => .smooth_step,
+        50 => .fma,
+        66 => .length,
+        67 => .distance,
+        68 => .cross,
+        69 => .normalize,
+        70 => .face_forward,
+        71 => .reflect,
+        72 => .refract,
+        else => std.debug.panic("unknown std function: {}", .{std_function}),
+    };
+}
+
 fn toPica200Decoration(decoration: []const u32) pica200.base.Decoration {
     return switch (@as(spirv.headers.Decoration, @enumFromInt(decoration[0]))) {
         .Location => .{ .location = decoration[1] },
@@ -94,6 +146,8 @@ pub const Translator = struct {
             .OpFOrdGreaterThanEqual => self.pica200_builder.createCmp(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], .greater_equal),
             // Branches
             .OpBranch => self.pica200_builder.createBranch(instruction.operands[0]),
+            // Special
+            .OpExtInst => self.pica200_builder.createStdCall(instruction.result_id, instruction.result_type_id, toPica200StdFunction(instruction.operands[1]), instruction.operands[2..]),
             // Ignored
             .OpCapability => {},
             .OpExtInstImport => {},

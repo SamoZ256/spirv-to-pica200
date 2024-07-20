@@ -1,7 +1,10 @@
 .fvec uniform1
 
-.constf zeros(0.0, 0.0, 0.0, 0.0)
-.constf ones(1.0, 1.0, 1.0, 1.0)
+.constf const1(0.0, 1.0, 0.0174532925, 57.295779513)
+.alias zeros const1.xxxx
+.alias ones const1.yyyy
+.alias deg_to_rad const1.zzzz
+.alias rad_to_deg const1.wwww
 .constf const20(0e0, 0e0, 0e0, 0e0)
 .constf const21(1e0, 1e0, 1e0, 1e0)
 .constf const30(5e-1, 5e-1, 5e-1, 5e-1)

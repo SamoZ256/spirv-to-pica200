@@ -48,3 +48,7 @@ test "control flow" {
 test "arrays" {
     try testShader("arrays");
 }
+
+test "standard library" {
+    try testShader("std");
+}
