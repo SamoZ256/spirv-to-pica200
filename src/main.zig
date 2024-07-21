@@ -92,6 +92,7 @@ pub fn main() !void {
         try compileShader(allocator, "src/test_shaders/control_flow.spv", "src/test_shaders/control_flow.v.pica", "src/test_shaders/control_flow.shbin", res.args.assembly != 0);
         try compileShader(allocator, "src/test_shaders/arrays.spv", "src/test_shaders/arrays.v.pica", "src/test_shaders/arrays.shbin", res.args.assembly != 0);
         try compileShader(allocator, "src/test_shaders/std.spv", "src/test_shaders/std.v.pica", "src/test_shaders/std.shbin", res.args.assembly != 0);
+        try compileShader(allocator, "src/test_shaders/matrices.spv", "src/test_shaders/matrices.v.pica", "src/test_shaders/matrices.shbin", res.args.assembly != 0);
     } else {
         var output1_filename = res.args.output.?;
         var output2_filename = res.args.output.?;

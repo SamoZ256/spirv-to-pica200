@@ -52,3 +52,7 @@ test "arrays" {
 test "standard library" {
     try testShader("std");
 }
+
+test "matrices" {
+    try testShader("matrices");
+}

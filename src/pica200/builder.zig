@@ -93,6 +93,7 @@ pub const Builder = struct {
         if (is_id) {
             return &self.id_map.get(index).?;
         } else {
+            // TODO: use the value as name istead of "INVALID"
             var index_v = base.Value.init("INVALID", .{ .id = 0, .ty = .{ .int = .{ .is_signed = false } } });
             index_v.constant = base.Constant{ .uint = index };
 
@@ -105,7 +106,7 @@ pub const Builder = struct {
             if (!src1.canBeSrc2()) {
                 // If neither can be src2, create a temporary register
                 var tmp = base.Value.init(try self.getAvailableRegisterName(1), src2.ty);
-                tmp.component_indices = src2.component_indices;
+                tmp.swizzle = src2.swizzle;
                 _ = try self.body.printLine("mov {s}, {s}", .{try self.getValueName(&tmp), try self.getValueName(src2)});
                 src2.* = tmp;
 
@@ -149,7 +150,7 @@ pub const Builder = struct {
     }
 
     pub fn createBoolType(self: *Builder, result: u32) void {
-        self.type_map.putAssumeCapacity(result, .{ .id = result, .ty = .{ .bool = {} } });
+        self.type_map.putAssumeCapacity(result, .{ .id = result, .ty = .{ .boolean = {} } });
     }
 
     pub fn createIntType(self: *Builder, result: u32, is_signed: bool) void {
@@ -170,7 +171,8 @@ pub const Builder = struct {
     pub fn createMatrixType(self: *Builder, result: u32, column_type: u32, column_count: u32) void {
         const column_type_t = self.type_map.getPtr(column_type);
         if (column_type_t) |t| {
-            self.type_map.putAssumeCapacity(result, .{ .id = result, .ty = .{ .matrix = .{ .column_type = t, .column_count = column_count } } });
+            // Matrix is just an array of vectors
+            self.type_map.putAssumeCapacity(result, .{ .id = result, .ty = .{ .array = .{ .element_type = t, .element_count = column_count } } });
         }
     }
 
@@ -215,7 +217,7 @@ pub const Builder = struct {
         const type_v = self.type_map.get(ty).?;
 
         const constant: base.Constant = switch (type_v.ty) {
-            .bool => .{ .bool = val != 0 },
+            .boolean => .{ .boolean = val != 0 },
             .int => |int| blk: {
                 if (int.is_signed) {
                     break :blk .{ .int = @bitCast(val) };
@@ -326,7 +328,8 @@ pub const Builder = struct {
         switch (storage_class) {
             .uniform => {
                 value.is_uniform = true;
-                try self.uniforms.printLine(".fvec {s}", .{value.name});
+                const prefix = type_v.ty.getUniformPrefix();
+                try self.uniforms.printLine(".{c}vec {s}{s}", .{prefix, value.name, try type_v.ty.getSuffix(self.allocator.allocator())});
             },
             else => {},
         }
@@ -459,6 +462,26 @@ pub const Builder = struct {
             rhs_v = new_rhs_v;
         }
         try self.body.printLine("mul {s}, {s}, {s}", .{try self.getValueName(&value), try self.getValueName(&lhs_v), try self.getValueName(&rhs_v)});
+    }
+
+    pub fn createMatrixTimesMatrix(_: *Builder, _: u32, _: u32, _: u32, _: u32) !void {
+        std.debug.panic("matrix times matrix not implemented\n", .{});
+    }
+
+    pub fn createMatrixTimesVector(self: *Builder, result: u32, _: u32, mat: u32, vec: u32) !void {
+        var mat_v = self.id_map.get(mat).?;
+        var vec_v = self.id_map.get(vec).?;
+
+        const value = base.Value.init(try self.getAvailableRegisterName(vec_v.ty.ty.getRegisterCount()), vec_v.ty);
+        try self.id_map.put(result, value);
+
+        // TODO: check for how many components
+        for (0..4) |i| {
+            const index_v = self.indexToValue(@intCast(i), false);
+            const val = try value.indexInto(self.allocator.allocator(), index_v);
+            const mtx = try mat_v.indexInto(self.allocator.allocator(), index_v);
+            try self.body.printLine("dp4 {s}, {s}, {s}", .{try self.getValueName(&val), try self.getValueName(&mtx), try self.getValueName(&vec_v)});
+        }
     }
 
     pub fn createCmp(self: *Builder, result: u32, ty: u32, lhs: u32, rhs: u32, cmp_mode: base.ComparisonMode) !void {

@@ -101,7 +101,7 @@ pub const DecorationProperties = struct {
 };
 
 pub const Constant = union(enum) {
-    bool: bool,
+    boolean: bool,
     int: i32,
     uint: u32,
     float: f32,
@@ -136,7 +136,7 @@ pub fn getComponentStr(component: i8) []const u8 {
 
 pub const Ty = union(enum) {
     void: void,
-    bool: void,
+    boolean: void,
     int: struct {
         is_signed: bool,
     },
@@ -144,10 +144,6 @@ pub const Ty = union(enum) {
     vector: struct {
         component_type: *const Type,
         component_count: u32,
-    },
-    matrix: struct {
-        column_type: *const Type,
-        column_count: u32,
     },
     array: struct {
         element_type: *const Type,
@@ -160,8 +156,7 @@ pub const Ty = union(enum) {
     pub fn getRegisterCount(self: Ty) u32 {
         return switch (self) {
             .void => 0,
-            .bool, .int, .float, .vector => 1,
-            .matrix => |mtx_type| mtx_type.column_count * mtx_type.column_type.ty.getRegisterCount(),
+            .boolean, .int, .float, .vector => 1,
             .array => |arr_type| arr_type.element_count * arr_type.element_type.ty.getRegisterCount(),
             .structure => |struct_type| blk: {
                 var result: u32 = 0;
@@ -176,11 +171,29 @@ pub const Ty = union(enum) {
     pub fn getComponentCount(self: Ty) u32 {
         return switch (self) {
             .void => 0,
-            .bool, .int, .float => 1,
+            .boolean, .int, .float => 1,
             .vector => |vector_t| vector_t.component_count,
-            .matrix => |matrix_t| matrix_t.column_type.ty.getComponentCount(),
             .array => |array_t| array_t.element_type.ty.getComponentCount(),
             .structure => unreachable,
+        };
+    }
+
+    pub fn getUniformPrefix(self: Ty) u8 {
+        return switch (self) {
+            .void => 'X',
+            .boolean => 'b',
+            .int => 'i',
+            .float => 'f',
+            .vector => |vector_t| vector_t.component_type.ty.getUniformPrefix(),
+            .array => |array_t| array_t.element_type.ty.getUniformPrefix(),
+            .structure => unreachable,
+        };
+    }
+
+    pub fn getSuffix(self: Ty, allocator: std.mem.Allocator) ![]const u8 {
+        return switch (self) {
+            .array => |array_t| try std.fmt.allocPrint(allocator, "[{}]", .{array_t.element_count}),
+            else => "",
         };
     }
 };
@@ -193,7 +206,7 @@ pub const Type = struct {
 pub const Value = struct {
     name: []const u8,
     ty: Type,
-    component_indices: [4]i8,
+    swizzle: [4]i8,
     constant: ?Constant,
     is_uniform: bool,
 
@@ -204,9 +217,9 @@ pub const Value = struct {
         const component_count = self.ty.ty.getComponentCount();
         for (0..4) |i| {
             if (i < component_count) {
-                self.component_indices[i] = @intCast(i);
+                self.swizzle[i] = @intCast(i);
             } else {
-                self.component_indices[i] = -1;
+                self.swizzle[i] = -1;
             }
         }
         self.constant = null;
@@ -223,10 +236,10 @@ pub const Value = struct {
                 result.name = try std.fmt.allocPrint(allocator, "{s}[{}]", .{self.name, index_v.constant.?.toIndex()});
             },
             else => {
-                result.component_indices[0] = result.component_indices[index_v.constant.?.toIndex()];
-                result.component_indices[1] = -1;
-                result.component_indices[2] = -1;
-                result.component_indices[3] = -1;
+                result.swizzle[0] = result.swizzle[index_v.constant.?.toIndex()];
+                result.swizzle[1] = -1;
+                result.swizzle[2] = -1;
+                result.swizzle[3] = -1;
             },
         }
 
@@ -234,13 +247,13 @@ pub const Value = struct {
     }
 
     pub fn getName(self: *const Value, allocator: std.mem.Allocator) ![]const u8 {
-        var component_indices_str: []const u8 = "";
-        if ((self.component_indices[0] != 0 or self.component_indices[1] != 1 or self.component_indices[2] != 2 or self.component_indices[3] != 3) and
-            (self.component_indices[0] != -1 or self.component_indices[1] != -1 or self.component_indices[2] != -1 or self.component_indices[3] != -1)) {
-            component_indices_str = try std.fmt.allocPrint(allocator, ".{s}{s}{s}{s}", .{getComponentStr(self.component_indices[0]), getComponentStr(self.component_indices[1]), getComponentStr(self.component_indices[2]), getComponentStr(self.component_indices[3])});
+        var swizzle_str: []const u8 = "";
+        if ((self.swizzle[0] != 0 or self.swizzle[1] != 1 or self.swizzle[2] != 2 or self.swizzle[3] != 3) and
+            (self.swizzle[0] != -1 or self.swizzle[1] != -1 or self.swizzle[2] != -1 or self.swizzle[3] != -1)) {
+            swizzle_str = try std.fmt.allocPrint(allocator, ".{s}{s}{s}{s}", .{getComponentStr(self.swizzle[0]), getComponentStr(self.swizzle[1]), getComponentStr(self.swizzle[2]), getComponentStr(self.swizzle[3])});
         }
 
-        return try std.fmt.allocPrint(allocator, "{s}{s}", .{self.name, component_indices_str});
+        return try std.fmt.allocPrint(allocator, "{s}{s}", .{self.name, swizzle_str});
     }
 
     pub fn canBeSrc2(self: *const Value) bool {

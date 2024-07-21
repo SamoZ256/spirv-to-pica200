@@ -1,0 +1,28 @@
+.fvec uniform1[4]
+
+.constf const1(0.0, 1.0, 0.0174532925, 57.295779513)
+.alias zeros const1.xxxx
+.alias ones const1.yyyy
+.alias deg_to_rad const1.zzzz
+.alias rad_to_deg const1.wwww
+.constf const18(1e0, 1e0, 1e0, 1e0)
+
+.out outpos position
+
+.proc main
+label5:
+    mov r0.x, v0.x
+    mov r0.y, v0.y
+    mov r0.z, v0.z
+    mov r0.w, const18.x
+    dp4 r1.x, uniform1[0], r0
+    dp4 r1.y, uniform1[1], r0
+    dp4 r1.z, uniform1[2], r0
+    dp4 r1.w, uniform1[3], r0
+    mov r2.x, r1.x
+    mov r2.y, r1.y
+    mov r2.z, r1.z
+    mov r2.w, const18.x
+    mov outpos, r2
+.end
+

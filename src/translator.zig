@@ -137,6 +137,11 @@ pub const Translator = struct {
             .OpFSub => self.pica200_builder.createAdd(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], 1),
             .OpFMul, .OpVectorTimesScalar => self.pica200_builder.createMul(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], false),
             .OpFDiv => self.pica200_builder.createMul(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], true),
+            // Matrix math
+            .OpMatrixTimesMatrix => self.pica200_builder.createMatrixTimesMatrix(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1]),
+            .OpMatrixTimesVector => self.pica200_builder.createMatrixTimesVector(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1]),
+            // TODO: implement
+            .OpMatrixTimesScalar => std.debug.panic("MatrixTimesScalar not implemented\n", .{}),
             // Comparison
             .OpFOrdEqual => self.pica200_builder.createCmp(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], .equal),
             .OpFOrdNotEqual => self.pica200_builder.createCmp(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], .not_equal),

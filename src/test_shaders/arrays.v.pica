@@ -1,4 +1,4 @@
-.fvec uniform0
+.fvec uniform0[24]
 
 .constf const1(0.0, 1.0, 0.0174532925, 57.295779513)
 .alias zeros const1.xxxx
