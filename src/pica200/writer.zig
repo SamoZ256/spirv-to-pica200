@@ -16,11 +16,15 @@ pub const Writer = struct {
         self.arr.deinit();
     }
 
-    pub fn printLine(self: *Writer, comptime fmt: []const u8, args: anytype) !void {
+    pub fn print(self: *Writer, comptime fmt: []const u8, args: anytype) !void {
         if (self.in_scope) {
             _ = try self.arr.writer().write("    ");
         }
         try self.arr.writer().print(fmt, args);
+    }
+
+    pub fn printLine(self: *Writer, comptime fmt: []const u8, args: anytype) !void {
+        try self.print(fmt, args);
         _ = try self.arr.writer().write("\n");
     }
 

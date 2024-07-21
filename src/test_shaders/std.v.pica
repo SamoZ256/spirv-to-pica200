@@ -7,6 +7,8 @@
 .alias ones const1.yyyy
 .alias deg_to_rad const1.zzzz
 .alias rad_to_deg const1.wwww
+.consti const72(1, 1, 1, 1)
+.consti const78(0, 0, 0, 0)
 .constf const84(1e0, 1e0, 1e0, 1e0)
 
 .out outpos position

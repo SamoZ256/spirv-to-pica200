@@ -5,20 +5,30 @@
 .alias ones const1.yyyy
 .alias deg_to_rad const1.zzzz
 .alias rad_to_deg const1.wwww
+.consti const13(0, 0, 0, 0)
+.consti const24(8, 8, 8, 8)
+.consti const35(1, 1, 1, 1)
+.consti const38(1, 1, 1, 1)
 .constf const48(1e0, 1e0, 1e0, 1e0)
+.consti const138(2, 2, 2, 2)
+.consti const139(3, 3, 3, 3)
+.consti const140(4, 4, 4, 4)
+.consti const141(5, 5, 5, 5)
+.consti const142(6, 6, 6, 6)
+.consti const143(7, 7, 7, 7)
 
 .out outpos position
 
 .proc main
 label5:
-    mov r0.x, uniform0[1].x
-    add r1.x, uniform0[0].x, r0.x
-    add r2.x, uniform0[2].x, r1.x
-    add r3.x, uniform0[3].x, r2.x
-    add r4.x, uniform0[4].x, r3.x
-    add r5.x, uniform0[5].x, r4.x
-    add r6.x, uniform0[6].x, r5.x
-    add r7.x, uniform0[7].x, r6.x
+    mov r0.x, uniform0[const35.x].x
+    add r1.x, uniform0[const13.x].x, r0.x
+    add r2.x, uniform0[const138.x].x, r1.x
+    add r3.x, uniform0[const139.x].x, r2.x
+    add r4.x, uniform0[const140.x].x, r3.x
+    add r5.x, uniform0[const141.x].x, r4.x
+    add r6.x, uniform0[const142.x].x, r5.x
+    add r7.x, uniform0[const143.x].x, r6.x
     mov r8.x, v0.x
     mov r8.y, v0.y
     mov r8.z, r7.x

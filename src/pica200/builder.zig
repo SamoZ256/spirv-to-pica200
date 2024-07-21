@@ -2,6 +2,56 @@ const std = @import("std");
 const writer = @import("writer.zig");
 const base = @import("base.zig");
 
+const ConstantDeclaration = struct {
+    index: u32,
+    zero_constant: base.Constant,
+    values: [4]base.Constant,
+    counter: u8,
+
+    pub fn init(index: *u32, zero_constant: base.Constant) ConstantDeclaration {
+        var self: ConstantDeclaration = undefined;
+        self.index = index.*;
+        self.zero_constant = zero_constant;
+        self.values = [_]base.Constant{zero_constant, zero_constant, zero_constant, zero_constant};
+        self.counter = 0;
+
+        index.* += 1;
+
+        return self;
+    }
+
+    pub fn push(self: *ConstantDeclaration, val: base.Constant) void {
+        self.values[self.counter] = val;
+        self.counter += 1;
+    }
+
+    pub fn flush(self: *const ConstantDeclaration, allocator: std.mem.Allocator, w: *writer.Writer) !void {
+        if (self.counter != 0) {
+            const prefix: u8 = switch (self.values[0]) {
+                .int => 'i',
+                .float => 'f',
+                else => unreachable,
+            };
+
+            try w.print(".const{c} shared_const{}(", .{prefix, self.index});
+            for (0..4) |i| {
+                if (i != 0) {
+                    _ = try w.print(", ", .{});
+                }
+                _ = try w.print("{s}", .{try self.values[i].toStr(allocator)});
+            }
+            _ = try w.printLine(")", .{});
+        }
+    }
+
+    pub fn flushIfFull(self: *ConstantDeclaration, allocator: std.mem.Allocator, w: *writer.Writer, index: *u32) !void {
+        if (self.counter >= 4) {
+            _ = try self.flush(allocator, w);
+            self.* = ConstantDeclaration.init(index, self.zero_constant);
+        }
+    }
+};
+
 pub const Builder = struct {
     allocator: std.heap.ArenaAllocator,
     buffer: [64 * 1024]u8,
@@ -13,8 +63,13 @@ pub const Builder = struct {
     // Writers
     uniforms: writer.Writer,
     constants: writer.Writer,
+    aliases: writer.Writer,
     outputs: writer.Writer,
     body: writer.Writer,
+
+    constant_counter: u32,
+    int_constant: ConstantDeclaration,
+    float_constant: ConstantDeclaration,
 
     // HACK
     register_counter: u32,
@@ -30,6 +85,7 @@ pub const Builder = struct {
         // Lock the pointers so that we can safely store them in the Ty structure as *const Type
         self.type_map.lockPointers();
         self.decoration_map = std.AutoHashMap(u32, base.DecorationProperties).init(allocator);
+        self.constant_counter = 1;
 
         // HACK
         self.register_counter = 0;
@@ -40,21 +96,26 @@ pub const Builder = struct {
     pub fn initWriters(self: *Builder) !void {
         self.uniforms = writer.Writer.init(self.fba.allocator());
         self.constants = writer.Writer.init(self.fba.allocator());
+        self.aliases = writer.Writer.init(self.fba.allocator());
         self.outputs = writer.Writer.init(self.fba.allocator());
         self.body = writer.Writer.init(self.fba.allocator());
 
         // Constants
-        try self.constants.printLine(".constf const1(0.0, 1.0, 0.0174532925, 57.295779513)", .{});
-        try self.constants.printLine(".alias zeros const1.xxxx", .{});
-        try self.constants.printLine(".alias ones const1.yyyy", .{});
-        try self.constants.printLine(".alias deg_to_rad const1.zzzz", .{});
-        try self.constants.printLine(".alias rad_to_deg const1.wwww", .{});
+        try self.constants.printLine(".constf shared_const0(0.0, 1.0, 0.0174532925, 57.295779513)", .{});
+        try self.aliases.printLine(".alias zeros shared_const0.xxxx", .{});
+        try self.aliases.printLine(".alias ones shared_const0.yyyy", .{});
+        try self.aliases.printLine(".alias deg_to_rad shared_const0.zzzz", .{});
+        try self.aliases.printLine(".alias rad_to_deg shared_const0.wwww", .{});
+
+        self.int_constant = ConstantDeclaration.init(&self.constant_counter, .{ .int = 0 });
+        self.float_constant = ConstantDeclaration.init(&self.constant_counter, .{ .float = 0.0 });
     }
 
     pub fn deinitWriters(self: *Builder) void {
         self.body.deinit();
         self.outputs.deinit();
         self.constants.deinit();
+        self.aliases.deinit();
         self.uniforms.deinit();
     }
 
@@ -67,9 +128,14 @@ pub const Builder = struct {
     }
 
     pub fn write(self: *Builder, w: anytype) !void {
+        try self.int_constant.flush(self.allocator.allocator(), &self.constants);
+        try self.float_constant.flush(self.allocator.allocator(), &self.constants);
+
         _ = try w.write(self.uniforms.arr.items);
         _ = try w.write("\n");
         _ = try w.write(self.constants.arr.items);
+        _ = try w.write("\n");
+        _ = try w.write(self.aliases.arr.items);
         _ = try w.write("\n");
         _ = try w.write(self.outputs.arr.items);
         _ = try w.write("\n");
@@ -89,13 +155,13 @@ pub const Builder = struct {
         return value.getName(self.allocator.allocator());
     }
 
-    fn indexToValue(self: *Builder, index: u32, is_id: bool) *const base.Value {
+    fn indexToValue(self: *Builder, index: u32, is_id: bool) !*const base.Value {
         if (is_id) {
             return &self.id_map.get(index).?;
         } else {
-            // TODO: use the value as name istead of "INVALID"
-            var index_v = base.Value.init("INVALID", .{ .id = 0, .ty = .{ .int = .{ .is_signed = false } } });
-            index_v.constant = base.Constant{ .uint = index };
+            const constant = base.Constant{ .uint = index };
+            var index_v = base.Value.init(try constant.toStr(self.allocator.allocator()), .{ .id = 0, .ty = .{ .int = .{ .is_signed = false } } });
+            index_v.constant = constant;
 
             return &index_v;
         }
@@ -233,10 +299,33 @@ pub const Builder = struct {
         value.constant = constant;
         try self.id_map.put(result, value);
 
-        // Only float constants can be used in the code
-        switch (constant) {
-            .float => |f| try self.constants.printLine(".constf {s}({}, {}, {}, {})", .{value.name, f, f, f, f}),
-            else => {},
+        // TODO: move this into a helper function
+        const constant_index = switch (constant) {
+            .int => blk: {
+                try self.int_constant.flushIfFull(self.allocator.allocator(), &self.constants, &self.constant_counter);
+                const component_index = self.int_constant.counter;
+                self.int_constant.push(constant);
+                break :blk .{ self.int_constant.index, component_index };
+            },
+            .float => blk: {
+                try self.float_constant.flushIfFull(self.allocator.allocator(), &self.constants, &self.constant_counter);
+                const component_index = self.float_constant.counter;
+                self.float_constant.push(constant);
+                break :blk .{ self.float_constant.index, component_index };
+            },
+            else => .{ 0, 0 },
+        };
+
+        if (constant_index[0] != 0) {
+            const swizzle: u8 = switch (constant_index[1]) {
+                0 => 'x',
+                1 => 'y',
+                2 => 'z',
+                3 => 'w',
+                else => unreachable
+            };
+
+            try self.aliases.printLine(".alias {s} shared_const{}.{c}{c}{c}{c}", .{value.name, constant_index[0], swizzle, swizzle, swizzle, swizzle});
         }
     }
 
@@ -249,6 +338,7 @@ pub const Builder = struct {
                 var values: [4]f32 = undefined;
                 for (0..4) |i| {
                     if (i < vector.component_count) {
+                        // TODO: support other vector types as well
                         values[i] = self.id_map.get(constituents[i]).?.constant.?.toFloat();
                     } else {
                         values[i] = 0.0;
@@ -265,7 +355,7 @@ pub const Builder = struct {
 
         switch (constant) {
             .vector_float => |vector| {
-                try self.constants.printLine(".constf {s}({}, {}, {}, {})", .{value.name, vector[0], vector[1], vector[2], vector[3]});
+                try self.constants.printLine(".const{c} {s}({}, {}, {}, {})", .{type_v.ty.getPrefix(), value.name, vector[0], vector[1], vector[2], vector[3]});
             },
             else => unreachable,
         }
@@ -328,8 +418,7 @@ pub const Builder = struct {
         switch (storage_class) {
             .uniform => {
                 value.is_uniform = true;
-                const prefix = type_v.ty.getUniformPrefix();
-                try self.uniforms.printLine(".{c}vec {s}{s}", .{prefix, value.name, try type_v.ty.getSuffix(self.allocator.allocator())});
+                try self.uniforms.printLine(".{c}vec {s}{s}", .{type_v.ty.getPrefix(), value.name, try type_v.ty.getSuffix(self.allocator.allocator())});
             },
             else => {},
         }
@@ -376,12 +465,13 @@ pub const Builder = struct {
         if (v) |val| {
             value = val;
         } else {
-            const index_v = self.indexToValue(indices[0], indices_are_ids);
+            const index_v = try self.indexToValue(indices[0], indices_are_ids);
             return self.createAccessChain(result, base.memberIndexToId(ptr, index_v.constant.?.toIndex()), indices[1..], indices_are_ids);
         }
 
         for (indices) |index| {
-            const index_v = self.indexToValue(index, indices_are_ids);
+            const index_v = try self.indexToValue(index, indices_are_ids);
+            std.debug.print("Index name: {s}, {}\n", .{try self.getValueName(index_v), index});
             value = try value.indexInto(self.allocator.allocator(), index_v);
         }
         try self.id_map.put(result, value);
@@ -393,7 +483,7 @@ pub const Builder = struct {
         var value = base.Value.init(try self.getAvailableRegisterName(type_v.ty.getRegisterCount()), type_v);
         for (0..components.len) |i| {
             const component = self.id_map.get(components[i]).?;
-            const index_v = self.indexToValue(@intCast(i), false);
+            const index_v = try self.indexToValue(@intCast(i), false);
             try self.body.printLine("mov {s}, {s}", .{try self.getValueName(&try value.indexInto(self.allocator.allocator(), index_v)), try self.getValueName(&component)});
         }
         try self.id_map.put(result, value);
@@ -456,7 +546,7 @@ pub const Builder = struct {
             var new_rhs_v = base.Value.init(try self.getAvailableRegisterName(type_v.ty.getRegisterCount()), type_v);
             // TODO: check how many components
             for (0..4) |i| {
-                const index_v = self.indexToValue(@intCast(i), false);
+                const index_v = try self.indexToValue(@intCast(i), false);
                 try self.body.printLine("rcp {s}, {s}", .{try self.getValueName(&try new_rhs_v.indexInto(self.allocator.allocator(), index_v)), try self.getValueName(&rhs_v)});
             }
             rhs_v = new_rhs_v;
@@ -477,7 +567,7 @@ pub const Builder = struct {
 
         // TODO: check for how many components
         for (0..4) |i| {
-            const index_v = self.indexToValue(@intCast(i), false);
+            const index_v = try self.indexToValue(@intCast(i), false);
             const val = try value.indexInto(self.allocator.allocator(), index_v);
             const mtx = try mat_v.indexInto(self.allocator.allocator(), index_v);
             try self.body.printLine("dp4 {s}, {s}, {s}", .{try self.getValueName(&val), try self.getValueName(&mtx), try self.getValueName(&vec_v)});

@@ -105,6 +105,7 @@ pub const Constant = union(enum) {
     int: i32,
     uint: u32,
     float: f32,
+    // TODO: make the vector accept any scalar type
     vector_float: [4]f32,
 
     pub fn toIndex(self: Constant) u32 {
@@ -121,6 +122,16 @@ pub const Constant = union(enum) {
             else => std.debug.panic("invalid float type\n", .{}),
         };
     }
+
+    pub fn toStr(self: Constant, allocator: std.mem.Allocator) ![]const u8 {
+        return switch (self) {
+            .boolean => |b| std.fmt.allocPrint(allocator, "{}", .{b}),
+            .int => |i| std.fmt.allocPrint(allocator, "{}", .{i}),
+            .uint => |u| std.fmt.allocPrint(allocator, "{}", .{u}),
+            .float => |f| std.fmt.allocPrint(allocator, "{}", .{f}),
+            .vector_float => |v| std.fmt.allocPrint(allocator, "({}, {}, {}, {})", .{v[0], v[1], v[2], v[3]}),
+        };
+    }
 };
 
 pub fn getComponentStr(component: i8) []const u8 {
@@ -130,7 +141,7 @@ pub fn getComponentStr(component: i8) []const u8 {
         1 => "y",
         2 => "z",
         3 => "w",
-        else => std.debug.panic("invalid component index\n", .{}),
+        else => std.debug.panic("invalid component index {}\n", .{component}),
     };
 }
 
@@ -178,14 +189,14 @@ pub const Ty = union(enum) {
         };
     }
 
-    pub fn getUniformPrefix(self: Ty) u8 {
+    pub fn getPrefix(self: Ty) u8 {
         return switch (self) {
             .void => 'X',
             .boolean => 'b',
             .int => 'i',
             .float => 'f',
-            .vector => |vector_t| vector_t.component_type.ty.getUniformPrefix(),
-            .array => |array_t| array_t.element_type.ty.getUniformPrefix(),
+            .vector => |vector_t| vector_t.component_type.ty.getPrefix(),
+            .array => |array_t| array_t.element_type.ty.getPrefix(),
             .structure => unreachable,
         };
     }
@@ -233,7 +244,7 @@ pub const Value = struct {
         switch (self.ty.ty) {
             .array => |array_type| {
                 result.ty = array_type.element_type.*;
-                result.name = try std.fmt.allocPrint(allocator, "{s}[{}]", .{self.name, index_v.constant.?.toIndex()});
+                result.name = try std.fmt.allocPrint(allocator, "{s}[{s}]", .{self.name, try index_v.getName(allocator)});
             },
             else => {
                 result.swizzle[0] = result.swizzle[index_v.constant.?.toIndex()];
