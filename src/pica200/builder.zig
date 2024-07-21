@@ -162,6 +162,10 @@ pub const Builder = struct {
             const constant = base.Constant{ .uint = index };
             var index_v = base.Value.init(try constant.toStr(self.allocator.allocator()), .{ .id = 0, .ty = .{ .int = .{ .is_signed = false } } });
             index_v.constant = constant;
+            // HACK: set the swizzle to .xyzw so as to not print the swizzle
+            for (0..4) |i| {
+                index_v.swizzle[i] = @intCast(i);
+            }
 
             return &index_v;
         }
