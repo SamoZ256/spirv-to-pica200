@@ -2,14 +2,16 @@
 .fvec uniform1
 .fvec uniform2
 
-.constf const1(0.0, 1.0, 0.0174532925, 57.295779513)
-.alias zeros const1.xxxx
-.alias ones const1.yyyy
-.alias deg_to_rad const1.zzzz
-.alias rad_to_deg const1.wwww
-.consti const72(1, 1, 1, 1)
-.consti const78(0, 0, 0, 0)
-.constf const84(1e0, 1e0, 1e0, 1e0)
+.constf shared_const0(0.0, 1.0, 0.0174532925, 57.295779513)
+.consti shared_const1(0, 0, 0, 0)
+.constf shared_const2(1e0, 0e0, 0e0, 0e0)
+
+.alias zeros shared_const0.xxxx
+.alias ones shared_const0.yyyy
+.alias deg_to_rad shared_const0.zzzz
+.alias rad_to_deg shared_const0.wwww
+.alias const78 shared_const1.xxxx
+.alias const84 shared_const2.xxxx
 
 .out outpos position
 

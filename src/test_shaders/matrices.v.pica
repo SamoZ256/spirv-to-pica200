@@ -1,13 +1,15 @@
 .fvec uniform1[4]
 
-.constf const1(0.0, 1.0, 0.0174532925, 57.295779513)
-.alias zeros const1.xxxx
-.alias ones const1.yyyy
-.alias deg_to_rad const1.zzzz
-.alias rad_to_deg const1.wwww
-.constf const18(1e0, 1e0, 1e0, 1e0)
-.consti const25(1, 1, 1, 1)
-.consti const31(0, 0, 0, 0)
+.constf shared_const0(0.0, 1.0, 0.0174532925, 57.295779513)
+.consti shared_const1(0, 0, 0, 0)
+.constf shared_const2(1e0, 0e0, 0e0, 0e0)
+
+.alias zeros shared_const0.xxxx
+.alias ones shared_const0.yyyy
+.alias deg_to_rad shared_const0.zzzz
+.alias rad_to_deg shared_const0.wwww
+.alias const18 shared_const2.xxxx
+.alias const31 shared_const1.xxxx
 
 .out outpos position
 
@@ -17,10 +19,10 @@ label5:
     mov r0.y, v0.y
     mov r0.z, v0.z
     mov r0.w, const18.x
-    dp4 r1.x, uniform1[INVALID.x], r0
-    dp4 r1.y, uniform1[INVALID.x], r0
-    dp4 r1.z, uniform1[INVALID.x], r0
-    dp4 r1.w, uniform1[INVALID.x], r0
+    dp4 r1.x, uniform1[0.x], r0
+    dp4 r1.y, uniform1[1.x], r0
+    dp4 r1.z, uniform1[2.x], r0
+    dp4 r1.w, uniform1[3.x], r0
     mov r2.x, r1.x
     mov r2.y, r1.y
     mov r2.z, r1.z

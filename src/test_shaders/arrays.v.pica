@@ -1,38 +1,43 @@
-.fvec uniform0[24]
+.fvec uniform1[8]
+.ivec uniform0
 
-.constf const1(0.0, 1.0, 0.0174532925, 57.295779513)
-.alias zeros const1.xxxx
-.alias ones const1.yyyy
-.alias deg_to_rad const1.zzzz
-.alias rad_to_deg const1.wwww
-.consti const13(0, 0, 0, 0)
-.consti const24(8, 8, 8, 8)
-.consti const35(1, 1, 1, 1)
-.consti const38(1, 1, 1, 1)
-.constf const48(1e0, 1e0, 1e0, 1e0)
-.consti const138(2, 2, 2, 2)
-.consti const139(3, 3, 3, 3)
-.consti const140(4, 4, 4, 4)
-.consti const141(5, 5, 5, 5)
-.consti const142(6, 6, 6, 6)
-.consti const143(7, 7, 7, 7)
+.constf shared_const0(0.0, 1.0, 0.0174532925, 57.295779513)
+.consti shared_const1(0, 1, 2, 3)
+.consti shared_const3(4, 5, 6, 7)
+.constf shared_const2(1e0, 0e0, 0e0, 0e0)
+
+.alias zeros shared_const0.xxxx
+.alias ones shared_const0.yyyy
+.alias deg_to_rad shared_const0.zzzz
+.alias rad_to_deg shared_const0.wwww
+.alias const13 shared_const1.xxxx
+.alias const35 shared_const1.yyyy
+.alias const56 shared_const2.xxxx
+.alias const146 shared_const1.zzzz
+.alias const147 shared_const1.wwww
+.alias const148 shared_const3.xxxx
+.alias const149 shared_const3.yyyy
+.alias const150 shared_const3.zzzz
+.alias const151 shared_const3.wwww
 
 .out outpos position
 
 .proc main
 label5:
-    mov r0.x, uniform0[const35.x].x
-    add r1.x, uniform0[const13.x].x, r0.x
-    add r2.x, uniform0[const138.x].x, r1.x
-    add r3.x, uniform0[const139.x].x, r2.x
-    add r4.x, uniform0[const140.x].x, r3.x
-    add r5.x, uniform0[const141.x].x, r4.x
-    add r6.x, uniform0[const142.x].x, r5.x
-    add r7.x, uniform0[const143.x].x, r6.x
-    mov r8.x, v0.x
-    mov r8.y, v0.y
-    mov r8.z, r7.x
-    mov r8.w, const48.x
-    mov outpos, r8
+    mov r0.x, uniform1[const35.x].x
+    add r1.x, uniform1[const13.x].x, r0.x
+    add r2.x, uniform1[const146.x].x, r1.x
+    add r3.x, uniform1[const147.x].x, r2.x
+    add r4.x, uniform1[const148.x].x, r3.x
+    add r5.x, uniform1[const149.x].x, r4.x
+    add r6.x, uniform1[const150.x].x, r5.x
+    add r7.x, uniform1[const151.x].x, r6.x
+    lg2 r8.x, uniform1[uniform0.x].x
+    add r9.x, r7.x, r8.x
+    mov r10.x, v0.x
+    mov r10.y, v0.y
+    mov r10.z, r9.x
+    mov r10.w, const56.x
+    mov outpos, r10
 .end
 

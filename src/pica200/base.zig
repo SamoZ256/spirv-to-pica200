@@ -112,14 +112,14 @@ pub const Constant = union(enum) {
         return switch (self) {
             .int => |i| @intCast(i),
             .uint => |u| u,
-            else => std.debug.panic("invalid array index type\n", .{}),
+            else => std.debug.panic("invalid array index type {}\n", .{self}),
         };
     }
 
     pub fn toFloat(self: Constant) f32 {
         return switch (self) {
             .float => |f| f,
-            else => std.debug.panic("invalid float type\n", .{}),
+            else => std.debug.panic("invalid float type {}\n", .{self}),
         };
     }
 

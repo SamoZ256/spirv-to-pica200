@@ -157,7 +157,7 @@ pub const Builder = struct {
 
     fn indexToValue(self: *Builder, index: u32, is_id: bool) !*const base.Value {
         if (is_id) {
-            return &self.id_map.get(index).?;
+            return self.id_map.getPtr(index).?;
         } else {
             const constant = base.Constant{ .uint = index };
             var index_v = base.Value.init(try constant.toStr(self.allocator.allocator()), .{ .id = 0, .ty = .{ .int = .{ .is_signed = false } } });
@@ -244,8 +244,9 @@ pub const Builder = struct {
 
     pub fn createArrayType(self: *Builder, result: u32, element_type: u32, element_count: u32) void {
         const element_type_t = self.type_map.getPtr(element_type);
+        const element_count_v = self.id_map.get(element_count).?;
         if (element_type_t) |t| {
-            self.type_map.putAssumeCapacity(result, .{ .id = result, .ty = .{ .array = .{ .element_type = t, .element_count = element_count } } });
+            self.type_map.putAssumeCapacity(result, .{ .id = result, .ty = .{ .array = .{ .element_type = t, .element_count = element_count_v.constant.?.toIndex() } } });
         }
     }
 
@@ -471,7 +472,6 @@ pub const Builder = struct {
 
         for (indices) |index| {
             const index_v = try self.indexToValue(index, indices_are_ids);
-            std.debug.print("Index name: {s}, {}\n", .{try self.getValueName(index_v), index});
             value = try value.indexInto(self.allocator.allocator(), index_v);
         }
         try self.id_map.put(result, value);
