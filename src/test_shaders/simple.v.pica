@@ -19,14 +19,14 @@
 
 .proc main
 label5:
+    mov r0.x, v0.x
     mov r0.y, v0.y
-    mov r0.y, v0.y
-    mov r0.y, const20.x
-    mov r0.y, const21.x
+    mov r0.z, const20.x
+    mov r0.w, const21.x
     mov outpos, r0
-    mul r1.xy, const30.x, v0.xy
-    add r2.xy, const41.xy, r1.xy
-    add r3.xy, uniform1.xy, r2.xy
-    mov outtexcoord0.xy, r3.xy
+    mul r0.xy, const30.x, v0.xy
+    add r0.xy, const41.xy, r0.xy
+    add r0.xy, uniform1.xy, r0.xy
+    mov outtexcoord0.xy, r0.xy
 .end
 

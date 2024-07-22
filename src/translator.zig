@@ -103,9 +103,9 @@ pub const Translator = struct {
             const instruction = try self.spirv_reader.readInstruction(false);
             // Free ids
             for (self.spirv_reader.getIdsToRelease()) |id| {
-                //self.pica200_builder.releaseId(id);
-                std.debug.print("release id: {}\n", .{id});
+                self.pica200_builder.releaseId(id);
             }
+            self.pica200_builder.releaseTempRegisters();
             try self.translateInstruction(&instruction);
         }
         try self.pica200_builder.write(writer);

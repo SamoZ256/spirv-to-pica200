@@ -52,7 +52,7 @@ const ConstantDeclaration = struct {
     }
 };
 
-pub const REGISTER_COUNT: u32 = 16;
+const REGISTER_COUNT: u8 = 16;
 
 pub const Builder = struct {
     allocator: std.heap.ArenaAllocator,
@@ -74,6 +74,7 @@ pub const Builder = struct {
     float_constant: ConstantDeclaration,
 
     registers_occupancy: [16]bool,
+    temporary_registers: std.ArrayList(u8),
 
     pub fn init(allocator: std.mem.Allocator) !Builder {
         var self: Builder = undefined;
@@ -88,6 +89,7 @@ pub const Builder = struct {
         self.decoration_map = std.AutoHashMap(u32, base.DecorationProperties).init(allocator);
         self.constant_counter = 1;
         self.registers_occupancy = [1]bool{false} ** 16;
+        self.temporary_registers = std.ArrayList(u8).init(allocator);
 
         return self;
     }
@@ -119,6 +121,7 @@ pub const Builder = struct {
     }
 
     pub fn deinit(self: *Builder) void {
+        self.temporary_registers.deinit();
         self.type_map.unlockPointers();
         self.decoration_map.deinit();
         self.type_map.deinit();
@@ -142,13 +145,25 @@ pub const Builder = struct {
         _ = try w.write("\n");
     }
 
-    //pub fn releaseId(self: *Builder, id: u32) !void {
-    //    const value = self.id_map.get(id).?;
-    //}
+    pub fn releaseId(self: *Builder, id: u32) void {
+        const value = self.id_map.get(id);
+        if (value) |v| {
+            if (v.register != base.INVALID_REGISTER) {
+                self.registers_occupancy[v.register] = false;
+            }
+        }
+    }
+
+    pub fn releaseTempRegisters(self: *Builder) void {
+        for (self.temporary_registers.items) |register| {
+            self.registers_occupancy[register] = false;
+        }
+        self.temporary_registers.clearAndFree();
+    }
 
     // Utility
     fn getAvailableRegister(self: *Builder) u8 {
-        var register: u8 = 16;
+        var register: u8 = base.INVALID_REGISTER;
         for (0..16) |i| {
             if (!self.registers_occupancy[i]) {
                 register = @intCast(i);
@@ -157,7 +172,7 @@ pub const Builder = struct {
             }
         }
 
-        if (register == 16) {
+        if (register == base.INVALID_REGISTER) {
             std.debug.panic("no available registers\n", .{});
         }
 
@@ -188,7 +203,7 @@ pub const Builder = struct {
         if (!src2.canBeSrc2()) {
             if (!src1.canBeSrc2()) {
                 // If neither can be src2, create a temporary register
-                var tmp = base.Value.init("r", self.getAvailableRegister(), src2.ty);
+                var tmp = try self.createTempValue(src2.ty);
                 tmp.swizzle = src2.swizzle;
                 _ = try self.body.printLine("mov {s}, {s}", .{try self.getValueName(&tmp), try self.getValueName(src2)});
                 src2.* = tmp;
@@ -203,6 +218,13 @@ pub const Builder = struct {
         }
 
         return false;
+    }
+
+    fn createTempValue(self: *Builder, ty: base.Type) !base.Value {
+        const register = self.getAvailableRegister();
+        try self.temporary_registers.append(register);
+
+        return base.Value.init("r", register, ty);
     }
 
     // Decoration instructions
@@ -313,7 +335,7 @@ pub const Builder = struct {
             else => std.debug.panic("unsupported constant type\n", .{}),
         };
 
-        var value = base.Value.init("const", result, type_v);
+        var value = base.Value.init(try std.fmt.allocPrint(self.allocator.allocator(), "const{}", .{result}), base.INVALID_REGISTER, type_v);
         value.constant = constant;
         try self.id_map.put(result, value);
 
@@ -343,7 +365,7 @@ pub const Builder = struct {
                 else => unreachable
             };
 
-            try self.aliases.printLine(".alias {s} shared_const{}.{c}{c}{c}{c}", .{try value.getNameBase(self.allocator.allocator()), constant_index[0], swizzle, swizzle, swizzle, swizzle});
+            try self.aliases.printLine(".alias {s} shared_const{}.{c}{c}{c}{c}", .{try value.getNameWithoutSwizzle(self.allocator.allocator()), constant_index[0], swizzle, swizzle, swizzle, swizzle});
         }
     }
 
@@ -367,13 +389,13 @@ pub const Builder = struct {
             else => std.debug.panic("unsupported constant composite type\n", .{}),
         };
 
-        var value = base.Value.init("const", result, type_v);
+        var value = base.Value.init(try std.fmt.allocPrint(self.allocator.allocator(), "const{}", .{result}), base.INVALID_REGISTER, type_v);
         value.constant = constant;
         try self.id_map.put(result, value);
 
         switch (constant) {
             .vector_float => |vector| {
-                try self.constants.printLine(".const{c} {s}({}, {}, {}, {})", .{type_v.ty.getPrefix(), try value.getNameBase(self.allocator.allocator()), vector[0], vector[1], vector[2], vector[3]});
+                try self.constants.printLine(".const{c} {s}({}, {}, {}, {})", .{type_v.ty.getPrefix(), try value.getNameWithoutSwizzle(self.allocator.allocator()), vector[0], vector[1], vector[2], vector[3]});
             },
             else => unreachable,
         }
@@ -411,32 +433,36 @@ pub const Builder = struct {
             }
         }
 
-        const name = switch (storage_class) {
-            .input => .{ "v", decoration_props.?.location },
+        var register: u8 = base.INVALID_REGISTER;
+        const name = try switch (storage_class) {
+            .input => try std.fmt.allocPrint(self.allocator.allocator(), "v{}", .{decoration_props.?.location}),
             .output => blk: {
                 if (decoration_props.?.position) {
                     try self.outputs.printLine(".out outpos position", .{});
-                    break :blk .{ "outpos", base.INVALID_REGISTER };
+                    break :blk "outpos";
                 } else if (decoration_props.?.has_location) {
                     const location = decoration_props.?.location;
                     const output_name = base.getOutputName(location);
                     const name = try std.fmt.allocPrint(self.allocator.allocator(), "out{s}", .{output_name});
                     try self.outputs.printLine(".out {s} {s}", .{name, output_name});
-                    break :blk .{ name, base.INVALID_REGISTER };
+                    break :blk name;
                 } else {
                     //std.log.warn("output without decoration\n", .{});
-                    break :blk .{ "INVALID_OUT", base.INVALID_REGISTER };
+                    break :blk "INVALID_OUT";
                 }
             },
-            .uniform => .{ "uniform", decoration_props.?.location },
-            .function => .{ "r", self.getAvailableRegister() },
+            .uniform => std.fmt.allocPrint(self.allocator.allocator(), "uniform{}", .{decoration_props.?.location}),
+            .function => blk: {
+                register = self.getAvailableRegister();
+                break :blk "r";
+            },
         };
 
-        var value = base.Value.init(name[0], name[1], type_v);
+        var value = base.Value.init(name, register, type_v);
         switch (storage_class) {
             .uniform => {
                 value.is_uniform = true;
-                try self.uniforms.printLine(".{c}vec {s}{s}", .{type_v.ty.getPrefix(), try value.getNameBase(self.allocator.allocator()), try type_v.ty.getSuffix(self.allocator.allocator())});
+                try self.uniforms.printLine(".{c}vec {s}{s}", .{type_v.ty.getPrefix(), try value.getNameWithoutSwizzle(self.allocator.allocator()), try type_v.ty.getSuffix(self.allocator.allocator())});
             },
             else => {},
         }
@@ -521,8 +547,8 @@ pub const Builder = struct {
         try self.body.printLine("mul {s}, {s}", .{try self.getValueName(&value), try self.getValueName(&a_v)});
 
         // If false
-        const temp1_v = base.Value.init("r", self.getAvailableRegister(), type_v);
-        const temp2_v = base.Value.init("r", self.getAvailableRegister(), type_v);
+        const temp1_v = try self.createTempValue(type_v);
+        const temp2_v = try self.createTempValue(type_v);
         // Subtract 1 from the condition so that it is 0 if true and -1 if false and therefore can be used with slt
         try self.body.printLine("add {s}, -ones, {s}", .{try self.getValueName(&temp1_v), try self.getValueName(&cond_v)});
         try self.body.printLine("slt {s}, zeros, {s}", .{try self.getValueName(&temp2_v), try self.getValueName(&temp1_v)});
@@ -541,7 +567,7 @@ pub const Builder = struct {
             neg = -neg;
         }
 
-        const value = base.Value.init("r", self.getAvailableRegister(), type_v);
+        const value = try self.createTempValue(type_v);
         try self.id_map.put(result, value);
 
         const negate1_str = if (neg == -1) "-" else "";
@@ -560,7 +586,7 @@ pub const Builder = struct {
         try self.id_map.put(result, value);
 
         if (invert) {
-            var new_rhs_v = base.Value.init("r", self.getAvailableRegister(), type_v);
+            var new_rhs_v = try self.createTempValue(type_v);
             // TODO: check how many components
             for (0..4) |i| {
                 const index_v = try self.indexToValue(@intCast(i), false);
@@ -633,7 +659,7 @@ pub const Builder = struct {
                 var arg_v = self.id_map.get(arguments[0]).?;
                 // TODO: move this into a utility function
                 if (!arg_v.canBeSrc2()) {
-                    const new_arg_v = base.Value.init("r", self.getAvailableRegister(), arg_v.ty);
+                    const new_arg_v = try self.createTempValue(arg_v.ty);
                     try self.body.printLine("mov {s}, {s}", .{try self.getValueName(&new_arg_v), try self.getValueName(&arg_v)});
                     arg_v = new_arg_v;
                 }
@@ -642,7 +668,7 @@ pub const Builder = struct {
             .degrees => {
                 var arg_v = self.id_map.get(arguments[0]).?;
                 if (!arg_v.canBeSrc2()) {
-                    const new_arg_v = base.Value.init("r", self.getAvailableRegister(), arg_v.ty);
+                    const new_arg_v = try self.createTempValue(arg_v.ty);
                     try self.body.printLine("mov {s}, {s}", .{try self.getValueName(&new_arg_v), try self.getValueName(&arg_v)});
                     arg_v = new_arg_v;
                 }
@@ -690,7 +716,7 @@ pub const Builder = struct {
                 var arg2_v = self.id_map.get(arguments[1]).?;
                 const arg3_v = self.id_map.get(arguments[2]).?;
                 _ = try self.swapIfNeeded(&arg1_v, &arg2_v);
-                const temp = base.Value.init("r", self.getAvailableRegister(), type_v);
+                const temp = try self.createTempValue(type_v);
 
                 // value = arg1 * (1 - arg3)
                 try self.body.printLine("add {s}, ones, -{s}", .{try self.getValueName(&temp), try self.getValueName(&arg3_v)});

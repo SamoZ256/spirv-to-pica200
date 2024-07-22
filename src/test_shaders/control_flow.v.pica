@@ -20,16 +20,16 @@ label5:
     mov r0.x, const9.x
     cmp uniform0.x, gt, gt, r0.x
     mov r1.x, cmp.xy
-    slt r2.x, zeros, -r1.x
-    mul r2.x, const17.x
-    add r3.x, -ones, r1.x
-    slt r4.x, zeros, r3.x
-    mul r4.x, const19.x
-    add r2.x, r2.x, r4.x
-    mov r5.y, v0.y
-    mov r5.y, v0.y
-    mov r5.y, r2.x
-    mov r5.y, const17.x
-    mov outpos, r5
+    slt r0.x, zeros, -r1.x
+    mul r0.x, const17.x
+    add r1.x, -ones, r1.x
+    slt r2.x, zeros, r1.x
+    mul r2.x, const19.x
+    add r0.x, r0.x, r2.x
+    mov r0.x, v0.x
+    mov r0.y, v0.y
+    mov r0.z, r0.x
+    mov r0.w, const17.x
+    mov outpos, r0
 .end
 

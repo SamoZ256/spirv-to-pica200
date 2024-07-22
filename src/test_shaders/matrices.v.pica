@@ -19,14 +19,14 @@ label5:
     mov r0.y, v0.y
     mov r0.z, v0.z
     mov r0.w, const18.x
-    dp4 r1.x, uniform1[0], r0
-    dp4 r1.y, uniform1[1], r0
-    dp4 r1.z, uniform1[2], r0
-    dp4 r1.w, uniform1[3], r0
-    mov r2.x, r1.x
-    mov r2.y, r1.y
-    mov r2.z, r1.z
-    mov r2.w, const18.x
-    mov outpos, r2
+    dp4 r0.x, uniform1[0], r0
+    dp4 r0.y, uniform1[1], r0
+    dp4 r0.z, uniform1[2], r0
+    dp4 r0.w, uniform1[3], r0
+    mov r0.x, r0.x
+    mov r0.y, r0.y
+    mov r0.z, r0.z
+    mov r0.w, const18.x
+    mov outpos, r0
 .end
 
