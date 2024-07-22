@@ -90,25 +90,22 @@ pub const Translator = struct {
 
     pub fn deinit(self: *Translator) void {
         self.pica200_builder.deinit();
-        self.spirv_reader.deinit();
     }
 
     pub fn translate(self: *Translator, writer: anytype) !void {
         self.spirv_reader.reset();
         try self.spirv_reader.findIdLifetimes();
-        std.debug.print("id lifetimes: {}\n", .{self.spirv_reader.id_lifetimes});
         self.spirv_reader.reset();
-
-        // HACK
-        var it = self.spirv_reader.id_lifetimes.iterator();
-        while (it.next()) |entry| {
-            std.debug.print("Key: {}, Value: {}\n", .{entry.key_ptr.*, entry.value_ptr.*});
-        }
 
         try self.pica200_builder.initWriters();
         _ = self.spirv_reader.readHeader();
         while (!self.spirv_reader.end()) {
             const instruction = try self.spirv_reader.readInstruction(false);
+            // Free ids
+            for (self.spirv_reader.getIdsToRelease()) |id| {
+                //self.pica200_builder.releaseId(id);
+                std.debug.print("release id: {}\n", .{id});
+            }
             try self.translateInstruction(&instruction);
         }
         try self.pica200_builder.write(writer);

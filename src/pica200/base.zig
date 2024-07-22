@@ -214,16 +214,21 @@ pub const Type = struct {
     ty: Ty,
 };
 
+pub const INVALID_REGISTER: u32 = std.math.maxInt(u32);
+
 pub const Value = struct {
     name: []const u8,
+    register: u32,
     ty: Type,
     swizzle: [4]i8,
+    index: []const u8,
     constant: ?Constant,
     is_uniform: bool,
 
-    pub fn init(name: []const u8, ty: Type) Value {
+    pub fn init(name: []const u8, register: u32, ty: Type) Value {
         var self: Value = undefined;
         self.name = name;
+        self.register = register;
         self.ty = ty;
         const component_count = self.ty.ty.getComponentCount();
         for (0..4) |i| {
@@ -233,6 +238,7 @@ pub const Value = struct {
                 self.swizzle[i] = -1;
             }
         }
+        self.index = "";
         self.constant = null;
         self.is_uniform = false;
 
@@ -244,7 +250,7 @@ pub const Value = struct {
         switch (self.ty.ty) {
             .array => |array_type| {
                 result.ty = array_type.element_type.*;
-                result.name = try std.fmt.allocPrint(allocator, "{s}[{s}]", .{self.name, try index_v.getName(allocator)});
+                result.index = try index_v.getName(allocator);
             },
             else => {
                 result.swizzle[0] = result.swizzle[index_v.constant.?.toIndex()];
@@ -257,14 +263,28 @@ pub const Value = struct {
         return result;
     }
 
+    pub fn getNameBase(self: *const Value, allocator: std.mem.Allocator) ![]const u8 {
+        var register_str: []const u8 = "";
+        if (self.register != INVALID_REGISTER) {
+            register_str = try std.fmt.allocPrint(allocator, "{}", .{self.register});
+        }
+
+        return try std.fmt.allocPrint(allocator, "{s}{s}", .{self.name, register_str});
+    }
+
     pub fn getName(self: *const Value, allocator: std.mem.Allocator) ![]const u8 {
+        var index_str: []const u8 = "";
+        if (self.index.len != 0) {
+            index_str = try std.fmt.allocPrint(allocator, "[{s}]", .{self.index});
+        }
+
         var swizzle_str: []const u8 = "";
         if ((self.swizzle[0] != 0 or self.swizzle[1] != 1 or self.swizzle[2] != 2 or self.swizzle[3] != 3) and
             (self.swizzle[0] != -1 or self.swizzle[1] != -1 or self.swizzle[2] != -1 or self.swizzle[3] != -1)) {
             swizzle_str = try std.fmt.allocPrint(allocator, ".{s}{s}{s}{s}", .{getComponentStr(self.swizzle[0]), getComponentStr(self.swizzle[1]), getComponentStr(self.swizzle[2]), getComponentStr(self.swizzle[3])});
         }
 
-        return try std.fmt.allocPrint(allocator, "{s}{s}", .{self.name, swizzle_str});
+        return try std.fmt.allocPrint(allocator, "{s}{s}{s}", .{try self.getNameBase(allocator), index_str, swizzle_str});
     }
 
     pub fn canBeSrc2(self: *const Value) bool {

@@ -17,21 +17,19 @@ pub const Instruction = struct {
 };
 
 pub const Reader = struct {
+    allocator: std.mem.Allocator,
     spv: []const u32,
     word_ptr: usize,
     instruction_counter: u32,
-    id_lifetimes: std.AutoHashMap(u32, u32),
+    // TODO: make the size dynamic
+    id_lifetimes: [1024]std.ArrayList(u32),
 
     pub fn init(allocator: std.mem.Allocator, spv: []const u32) Reader {
         var self: Reader = undefined;
+        self.allocator = allocator;
         self.spv = spv;
-        self.id_lifetimes = std.AutoHashMap(u32, u32).init(allocator);
 
         return self;
-    }
-
-    pub fn deinit(self: *Reader) void {
-        self.id_lifetimes.deinit();
     }
 
     pub fn reset(self: *Reader) void {
@@ -43,6 +41,10 @@ pub const Reader = struct {
         while (!self.end()) {
             _ = try self.readInstruction(true);
         }
+    }
+
+    pub fn getIdsToRelease(self: *const Reader) []const u32 {
+        return self.id_lifetimes[self.instruction_counter - 1].items;
     }
 
     pub fn readHeader(self: *const Reader) Header {
@@ -67,6 +69,10 @@ pub const Reader = struct {
         word_count -= 1; // Subtract opcode
         const operands = self.readWords(word_count);
         var operands_begin: u32 = 0;
+        var lifetime_array = &self.id_lifetimes[self.instruction_counter];
+        if (write_id_lifetimes) {
+            lifetime_array.* = std.ArrayList(u32).init(self.allocator);
+        }
         for (0..operands.len) |i| {
             const operand = operands[i];
             switch (inst_info.operands[@min(i, inst_info.operands.len - 1)]) {
@@ -80,7 +86,7 @@ pub const Reader = struct {
                 },
                 .id_ref => {
                     if (write_id_lifetimes) {
-                        try self.id_lifetimes.put(operand, self.instruction_counter);
+                        try lifetime_array.append(operand);
                     }
                 },
                 else => {},

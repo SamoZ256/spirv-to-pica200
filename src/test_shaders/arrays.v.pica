@@ -34,10 +34,10 @@ label5:
     add r7.x, uniform1[const151.x].x, r6.x
     lg2 r8.x, uniform1[uniform0.x].x
     add r9.x, r7.x, r8.x
-    mov r10.x, v0.x
     mov r10.y, v0.y
-    mov r10.z, r9.x
-    mov r10.w, const56.x
+    mov r10.y, v0.y
+    mov r10.y, r9.x
+    mov r10.y, const56.x
     mov outpos, r10
 .end
 

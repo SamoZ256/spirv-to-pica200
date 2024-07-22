@@ -26,10 +26,10 @@ label5:
     slt r4.x, zeros, r3.x
     mul r4.x, const19.x
     add r2.x, r2.x, r4.x
-    mov r5.x, v0.x
     mov r5.y, v0.y
-    mov r5.z, r2.x
-    mov r5.w, const17.x
+    mov r5.y, v0.y
+    mov r5.y, r2.x
+    mov r5.y, const17.x
     mov outpos, r5
 .end
 
