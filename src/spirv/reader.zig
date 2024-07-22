@@ -38,9 +38,17 @@ pub const Reader = struct {
     }
 
     pub fn findIdLifetimes(self: *Reader) !void {
+        var lifetime_map = std.AutoHashMap(u32, u32).init(self.allocator);
+        defer lifetime_map.deinit();
+        var id_remap_map = std.AutoHashMap(u32, u32).init(self.allocator);
+        defer id_remap_map.deinit();
         while (!self.end()) {
-            _ = try self.readInstruction(true);
+            try self.writeInstructionIdLifetimes(&lifetime_map, &id_remap_map);
         }
+        var it = lifetime_map.iterator();
+    	while (it.next()) |i| {
+    		try self.id_lifetimes[i.value_ptr.*].append(i.key_ptr.*);
+    	}
     }
 
     pub fn getIdsToRelease(self: *const Reader) []const u32 {
@@ -58,7 +66,51 @@ pub const Reader = struct {
         return header;
     }
 
-    pub fn readInstruction(self: *Reader, write_id_lifetimes: bool) !Instruction {
+    fn writeInstructionIdLifetimes(self: *Reader, lifetime_map: *std.AutoHashMap(u32, u32), id_remap_map: *std.AutoHashMap(u32, u32)) !void {
+        // TODO: abstract this away
+        const opcode_combined = self.readWord();
+        var word_count = (opcode_combined & 0xFFFF0000) >> 16;
+        const opcode: headers.Op = @enumFromInt(opcode_combined & 0xFFFF);
+
+        const inst_info = headers.getInstructionInfo(opcode);
+        word_count -= 1; // Subtract opcode
+        const operands = self.readWords(word_count);
+        self.id_lifetimes[self.instruction_counter] = std.ArrayList(u32).init(self.allocator);
+        for (0..operands.len) |i| {
+            var operand = operands[i];
+            const operand_type = inst_info.operands[@min(i, inst_info.operands.len - 1)];
+            switch (operand_type) {
+                .result_id, .id_ref => {
+                    while (true) {
+                        const remapped_operand = id_remap_map.get(operand);
+                        if (remapped_operand) |remapped_o| {
+                            operand = remapped_o;
+                        } else {
+                            break;
+                        }
+                    }
+                    //std.debug.print("Extending lifetime of {}\n", .{operand});
+                    try lifetime_map.put(operand, self.instruction_counter);
+                },
+                else => {},
+            }
+        }
+
+        // Every instruction that does not create a new value for the result id must be remapped
+        switch (opcode) {
+            .OpLoad, .OpCompositeExtract, .OpAccessChain => {
+                const id = operands[1];
+                const id_ref = operands[2];
+                try id_remap_map.put(id, id_ref);
+                //std.debug.print("remapping {} to {}\n", .{id, id_ref});
+            },
+            else => {},
+        }
+
+        self.instruction_counter += 1;
+    }
+
+    pub fn readInstruction(self: *Reader) Instruction {
         var instruction: Instruction = undefined;
 
         const opcode_combined = self.readWord();
@@ -69,13 +121,10 @@ pub const Reader = struct {
         word_count -= 1; // Subtract opcode
         const operands = self.readWords(word_count);
         var operands_begin: u32 = 0;
-        var lifetime_array = &self.id_lifetimes[self.instruction_counter];
-        if (write_id_lifetimes) {
-            lifetime_array.* = std.ArrayList(u32).init(self.allocator);
-        }
         for (0..operands.len) |i| {
             const operand = operands[i];
-            switch (inst_info.operands[@min(i, inst_info.operands.len - 1)]) {
+            const operand_type = inst_info.operands[@min(i, inst_info.operands.len - 1)];
+            switch (operand_type) {
                 .result_type_id => {
                     instruction.result_type_id = operand;
                     operands_begin += 1;
@@ -83,11 +132,6 @@ pub const Reader = struct {
                 .result_id => {
                     instruction.result_id = operand;
                     operands_begin += 1;
-                },
-                .id_ref => {
-                    if (write_id_lifetimes) {
-                        try lifetime_array.append(operand);
-                    }
                 },
                 else => {},
             }

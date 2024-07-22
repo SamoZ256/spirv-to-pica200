@@ -510,7 +510,8 @@ pub const Builder = struct {
             value = val;
         } else {
             const index_v = try self.indexToValue(indices[0], indices_are_ids);
-            return self.createAccessChain(result, base.memberIndexToId(ptr, index_v.constant.?.toIndex()), indices[1..], indices_are_ids);
+            try self.createAccessChain(result, base.memberIndexToId(ptr, index_v.constant.?.toIndex()), indices[1..], indices_are_ids);
+            return;
         }
 
         for (indices) |index| {
@@ -524,12 +525,12 @@ pub const Builder = struct {
         const type_v = self.type_map.get(ty).?;
 
         var value = base.Value.init("r", self.getAvailableRegister(), type_v);
+        try self.id_map.put(result, value);
         for (0..components.len) |i| {
             const component = self.id_map.get(components[i]).?;
             const index_v = try self.indexToValue(@intCast(i), false);
             try self.body.printLine("mov {s}, {s}", .{try self.getValueName(&try value.indexInto(self.allocator.allocator(), index_v)), try self.getValueName(&component)});
         }
-        try self.id_map.put(result, value);
     }
 
     // TODO: optimize this
@@ -567,7 +568,7 @@ pub const Builder = struct {
             neg = -neg;
         }
 
-        const value = try self.createTempValue(type_v);
+        const value = base.Value.init("r", self.getAvailableRegister(), type_v);
         try self.id_map.put(result, value);
 
         const negate1_str = if (neg == -1) "-" else "";

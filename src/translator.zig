@@ -100,13 +100,13 @@ pub const Translator = struct {
         try self.pica200_builder.initWriters();
         _ = self.spirv_reader.readHeader();
         while (!self.spirv_reader.end()) {
-            const instruction = try self.spirv_reader.readInstruction(false);
-            // Free ids
+            const instruction = self.spirv_reader.readInstruction();
+            try self.translateInstruction(&instruction);
+            // Release ids
+            self.pica200_builder.releaseTempRegisters();
             for (self.spirv_reader.getIdsToRelease()) |id| {
                 self.pica200_builder.releaseId(id);
             }
-            self.pica200_builder.releaseTempRegisters();
-            try self.translateInstruction(&instruction);
         }
         try self.pica200_builder.write(writer);
         self.pica200_builder.deinitWriters();

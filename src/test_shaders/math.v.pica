@@ -23,12 +23,12 @@ label5:
     mov r0.x, r1.x
     mov r0.y, r1.x
     mov r0.z, r1.x
-    add r0.xyz, -const59.xyz, r0.xyz
-    add r0.x, r0.x, r0.y
-    add r0.x, r0.x, r0.z
+    add r1.xyz, -const59.xyz, r0.xyz
+    add r0.x, r1.x, r1.y
+    add r1.x, r0.x, r1.z
     mov r0.x, v0.x
     mov r0.y, v0.y
-    mov r0.z, r0.x
+    mov r0.z, r1.x
     mov r0.w, const47.x
     mov outpos, r0
 .end

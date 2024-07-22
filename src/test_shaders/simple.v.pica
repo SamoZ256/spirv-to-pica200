@@ -25,8 +25,8 @@ label5:
     mov r0.w, const21.x
     mov outpos, r0
     mul r0.xy, const30.x, v0.xy
-    add r0.xy, const41.xy, r0.xy
-    add r0.xy, uniform1.xy, r0.xy
+    add r1.xy, const41.xy, r0.xy
+    add r0.xy, uniform1.xy, r1.xy
     mov outtexcoord0.xy, r0.xy
 .end
 
