@@ -47,7 +47,8 @@ pub fn main() !void {
     }
 
     // Instruction info
-    try writer.print("pub const InstructionInfo = struct {{\n    has_result_type: bool,\n    has_result: bool,\n}};\n\n", .{});
+    try writer.print("pub const OperandType = enum {{\n    result_type_id,\n    result_id,\n    id_ref,\n    other,\n}};\n\n", .{});
+    try writer.print("pub const InstructionInfo = struct {{\n    operands: []const OperandType,\n}};\n\n", .{});
 
     // SPIRV grammar
     const spirv_grammar_data = @embedFile("spirv.core.grammar.json");
@@ -67,19 +68,28 @@ pub fn main() !void {
         previous_opcode = opcode;
         const opname = instruction_tree.get("opname").string();
         const operands_tree = instruction_tree.object().getOrNull("operands");
-        var has_result_type = false;
-        var has_result = false;
+        try writer.print("        .{s} => .{{ .operands = &[_]OperandType{{ ", .{opname});
+        var pushed = false;
         if (operands_tree) |operands| {
-            for (operands.array().items()) |operand_tree| {
+            for (0..operands.array().items().len) |i| {
+                if (pushed) {
+                    try writer.print(", ", .{});
+                }
+                pushed = true;
+                const operand_tree = operands.array().items()[i];
                 const kind = operand_tree.get("kind").string();
                 if (std.mem.eql(u8, kind, "IdResultType")) {
-                    has_result_type = true;
+                    try writer.print(".result_type_id", .{});
                 } else if (std.mem.eql(u8, kind, "IdResult")) {
-                    has_result = true;
+                    try writer.print(".result_id", .{});
+                } else if (std.mem.eql(u8, kind, "IdRef")) {
+                    try writer.print(".id_ref", .{});
+                } else  {
+                    try writer.print(".other", .{});
                 }
             }
         }
-        try writer.print("        .{s} => .{{ .has_result_type = {}, .has_result = {} }},\n", .{opname, has_result_type, has_result});
+        try writer.print(" }} }},\n", .{});
     }
     try writer.print("    }};\n}}\n", .{});
 
