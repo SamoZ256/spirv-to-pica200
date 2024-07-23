@@ -35,7 +35,7 @@ label5:
     mov r1.x, const22.x
     cmp uniform1.x, eq, eq, r1.x
     jmpc cmp.x, label24
-    jmpu i_ones.x, label26
+    jmpc !cmp.x, label26
 label24:
     jmpu i_ones.x, label25
 label26:
