@@ -141,6 +141,10 @@ pub const Translator = struct {
             .OpAccessChain => self.pica200_builder.createAccessChain(instruction.result_id, instruction.operands[0], instruction.operands[1..instruction.operands.len], true),
             .OpCompositeConstruct => self.pica200_builder.createConstruct(instruction.result_id, instruction.result_type_id, instruction.operands),
             .OpSelect => self.pica200_builder.createSelect(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], instruction.operands[2]),
+            // HACK
+            .OpPhi => self.pica200_builder.id_map.put(instruction.result_id, pica200.base.Value.init("INVALID", pica200.base.INVALID_REGISTER, self.pica200_builder.type_map.get(instruction.result_type_id).?)),
+            // TODO: don't ignore this
+            .OpSelectionMerge => {},
             // Math
             .OpFAdd => self.pica200_builder.createAdd(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], 0),
             .OpFSub => self.pica200_builder.createAdd(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], 1),
@@ -160,6 +164,7 @@ pub const Translator = struct {
             .OpFOrdGreaterThanEqual => self.pica200_builder.createCmp(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], .greater_equal),
             // Branches
             .OpBranch => self.pica200_builder.createBranch(instruction.operands[0]),
+            .OpBranchConditional => self.pica200_builder.createBranchConditional(instruction.operands[0], instruction.operands[1], instruction.operands[2]),
             // Special
             .OpExtInst => self.pica200_builder.createStdCall(instruction.result_id, instruction.result_type_id, toPica200StdFunction(instruction.operands[1]), instruction.operands[2..]),
             // Ignored

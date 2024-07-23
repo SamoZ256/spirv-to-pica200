@@ -53,6 +53,7 @@ const ConstantDeclaration = struct {
 };
 
 const REGISTER_COUNT: u8 = 16;
+const INVALID_ID = std.math.maxInt(u32);
 
 pub const Builder = struct {
     allocator: std.heap.ArenaAllocator,
@@ -76,6 +77,8 @@ pub const Builder = struct {
     registers_occupancy: [16]bool,
     temporary_registers: std.ArrayList(u8),
 
+    cmp_owner: u32,
+
     pub fn init(allocator: std.mem.Allocator) !Builder {
         var self: Builder = undefined;
         self.allocator = std.heap.ArenaAllocator.init(allocator);
@@ -87,9 +90,10 @@ pub const Builder = struct {
         // Lock the pointers so that we can safely store them in the Ty structure as *const Type
         self.type_map.lockPointers();
         self.decoration_map = std.AutoHashMap(u32, base.DecorationProperties).init(allocator);
-        self.constant_counter = 1;
+        self.constant_counter = 2;
         self.registers_occupancy = [1]bool{false} ** 16;
         self.temporary_registers = std.ArrayList(u8).init(allocator);
+        self.cmp_owner = INVALID_ID;
 
         return self;
     }
@@ -103,10 +107,14 @@ pub const Builder = struct {
 
         // Constants
         try self.constants.printLine(".constf shared_const0(0.0, 1.0, 0.0174532925, 57.295779513)", .{});
-        try self.aliases.printLine(".alias zeros shared_const0.xxxx", .{});
-        try self.aliases.printLine(".alias ones shared_const0.yyyy", .{});
+        try self.aliases.printLine(".alias f_zeros shared_const0.xxxx", .{});
+        try self.aliases.printLine(".alias f_ones shared_const0.yyyy", .{});
         try self.aliases.printLine(".alias deg_to_rad shared_const0.zzzz", .{});
         try self.aliases.printLine(".alias rad_to_deg shared_const0.wwww", .{});
+
+        try self.constants.printLine(".consti shared_const1(0, 1, 0, 0)", .{});
+        try self.aliases.printLine(".alias i_zeros shared_const1.xxxx", .{});
+        try self.aliases.printLine(".alias i_ones shared_const1.yyyy", .{});
 
         self.int_constant = ConstantDeclaration.init(&self.constant_counter, .{ .int = 0 });
         self.float_constant = ConstantDeclaration.init(&self.constant_counter, .{ .float = 0.0 });
@@ -225,6 +233,16 @@ pub const Builder = struct {
         try self.temporary_registers.append(register);
 
         return base.Value.init("r", register, ty);
+    }
+
+    fn setCmpOwner(self: *Builder, owner: u32) void {
+        self.cmp_owner = owner;
+    }
+
+    fn assertCmpOwner(self: *Builder, owner: u32) void {
+        if (self.cmp_owner != owner) {
+            std.debug.panic("{} needs to own cmp, but cmp is owned by {}\n", .{owner, self.cmp_owner});
+        }
     }
 
     // Decoration instructions
@@ -543,18 +561,17 @@ pub const Builder = struct {
         const value = base.Value.init("r", self.getAvailableRegister(), type_v);
         try self.id_map.put(result, value);
 
-        // If true
-        try self.body.printLine("slt {s}, zeros, -{s}", .{try self.getValueName(&value), try self.getValueName(&cond_v)});
-        try self.body.printLine("mul {s}, {s}", .{try self.getValueName(&value), try self.getValueName(&a_v)});
+        // Jump to true block if condition is true
+        try self.body.printLine("ifc {s}", .{try self.getValueName(&cond_v)});
 
-        // If false
-        const temp1_v = try self.createTempValue(type_v);
-        const temp2_v = try self.createTempValue(type_v);
-        // Subtract 1 from the condition so that it is 0 if true and -1 if false and therefore can be used with slt
-        try self.body.printLine("add {s}, -ones, {s}", .{try self.getValueName(&temp1_v), try self.getValueName(&cond_v)});
-        try self.body.printLine("slt {s}, zeros, {s}", .{try self.getValueName(&temp2_v), try self.getValueName(&temp1_v)});
-        try self.body.printLine("mul {s}, {s}", .{try self.getValueName(&temp2_v), try self.getValueName(&b_v)});
-        try self.body.printLine("add {s}, {s}, {s}", .{try self.getValueName(&value), try self.getValueName(&value), try self.getValueName(&temp2_v)});
+        // True block
+        try self.body.printLine("    mov {s}, {s}", .{try self.getValueName(&value), try self.getValueName(&a_v)});
+
+        // False block
+        try self.body.printLine(".else", .{});
+        try self.body.printLine("    mov {s}, {s}", .{try self.getValueName(&value), try self.getValueName(&b_v)});
+
+        try self.body.printLine(".end", .{});
     }
 
     // negate can have 3 possible values: -1 => negate lhs, 0 => don't negate, 1 => negate rhs
@@ -627,20 +644,28 @@ pub const Builder = struct {
         if (try self.swapIfNeeded(&lhs_v, &rhs_v)) {
             c_mode = c_mode.opposite();
         }
-        const value = base.Value.init("r", self.getAvailableRegister(), type_v);
+        const value = base.Value.init("cmp", base.INVALID_REGISTER, type_v);
         try self.id_map.put(result, value);
+
+        // Make the result the new cmp owner
+        self.setCmpOwner(result);
 
         const cmp_str = c_mode.toStr();
         //const cmp2_str = cmp_modes[1].toStr();
         try self.body.printLine("cmp {s}, {s}, {s}, {s}", .{try self.getValueName(&lhs_v), cmp_str, cmp_str, try self.getValueName(&rhs_v)});
-        // TODO: index into value with .xy
-        // TODO: fix "error: invalid register: cmp"
-        try self.body.printLine("mov {s}, cmp.xy", .{try self.getValueName(&value)});
     }
 
-    pub fn createBranch(self: *Builder, dst: u32) !void {
+    pub fn createBranch(self: *Builder, b: u32) !void {
         // TODO: check if this is correct
-        try self.body.printLine("jmpc ones.x, label{}", .{dst});
+        try self.body.printLine("jmpu i_ones.x, label{}", .{b});
+    }
+
+    pub fn createBranchConditional(self: *Builder, condition: u32, true_b: u32, false_b: u32) !void {
+        const condition_v = self.id_map.get(condition).?;
+
+        try self.body.printLine("jmpc {s}, label{}", .{try self.getValueName(&condition_v), true_b});
+        // TODO: check if this is correct
+        try self.body.printLine("jmpu i_ones.x, label{}", .{false_b});
     }
 
     // TODO: implement other branch instructions
@@ -720,7 +745,7 @@ pub const Builder = struct {
                 const temp = try self.createTempValue(type_v);
 
                 // value = arg1 * (1 - arg3)
-                try self.body.printLine("add {s}, ones, -{s}", .{try self.getValueName(&temp), try self.getValueName(&arg3_v)});
+                try self.body.printLine("add {s}, f_ones, -{s}", .{try self.getValueName(&temp), try self.getValueName(&arg3_v)});
                 try self.body.printLine("mul {s}, {s}, {s}", .{try self.getValueName(&value), try self.getValueName(&arg1_v), try self.getValueName(&temp)});
 
                 // value = value + arg2 * arg3

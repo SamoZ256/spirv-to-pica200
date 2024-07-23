@@ -2,23 +2,26 @@
 .ivec uniform0
 
 .constf shared_const0(0.0, 1.0, 0.0174532925, 57.295779513)
-.consti shared_const1(0, 1, 2, 3)
-.consti shared_const3(4, 5, 6, 7)
-.constf shared_const2(1e0, 0e0, 0e0, 0e0)
+.consti shared_const1(0, 1, 0, 0)
+.consti shared_const2(0, 1, 2, 3)
+.consti shared_const4(4, 5, 6, 7)
+.constf shared_const3(1e0, 0e0, 0e0, 0e0)
 
-.alias zeros shared_const0.xxxx
-.alias ones shared_const0.yyyy
+.alias f_zeros shared_const0.xxxx
+.alias f_ones shared_const0.yyyy
 .alias deg_to_rad shared_const0.zzzz
 .alias rad_to_deg shared_const0.wwww
-.alias const13 shared_const1.xxxx
-.alias const35 shared_const1.yyyy
-.alias const56 shared_const2.xxxx
-.alias const146 shared_const1.zzzz
-.alias const147 shared_const1.wwww
-.alias const148 shared_const3.xxxx
-.alias const149 shared_const3.yyyy
-.alias const150 shared_const3.zzzz
-.alias const151 shared_const3.wwww
+.alias i_zeros shared_const1.xxxx
+.alias i_ones shared_const1.yyyy
+.alias const13 shared_const2.xxxx
+.alias const35 shared_const2.yyyy
+.alias const56 shared_const3.xxxx
+.alias const146 shared_const2.zzzz
+.alias const147 shared_const2.wwww
+.alias const148 shared_const4.xxxx
+.alias const149 shared_const4.yyyy
+.alias const150 shared_const4.zzzz
+.alias const151 shared_const4.wwww
 
 .out outpos position
 
