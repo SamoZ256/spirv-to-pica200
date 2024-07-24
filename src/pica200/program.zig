@@ -38,8 +38,6 @@ const Opcode = enum {
     jmpu,
     mad,
 
-    label,
-
     dot_proc,
     dot_else,
     dot_end,
@@ -80,7 +78,6 @@ const Opcode = enum {
             .ifu => "ifu",
             .jmpu => "jmpu",
             .mad => "mad",
-            .label => "",
             .dot_proc => ".proc",
             .dot_else => ".else",
             .dot_end => ".end",
@@ -90,27 +87,61 @@ const Opcode = enum {
 
 const Instruction = struct {
     opcode: Opcode,
+    result: u32,
     operands: [4][]const u8,
     operand_count: usize,
 };
 
-pub const ProgramWriter = struct {
+pub const Block = struct {
+    id: u32,
     instructions: std.ArrayList(Instruction),
 
-    pub fn init(allocator: std.mem.Allocator) ProgramWriter {
-        var self: ProgramWriter = undefined;
+    pub fn init(allocator: std.mem.Allocator, id: u32) Block {
+        var self: Block = undefined;
+        self.id = id;
         self.instructions = std.ArrayList(Instruction).init(allocator);
 
         return self;
     }
 
-    pub fn deinit(self: *ProgramWriter) void {
+    pub fn deinit(self: *Block) void {
         self.instructions.deinit();
     }
 
-    pub fn addInstruction(self: *ProgramWriter, opcode: Opcode, operands: anytype) !void {
+    pub fn write(self: *const Block, w: *writer.Writer) !void {
+        try w.printLine("label{}:", .{self.id});
+
+        var indent: u32 = 1;
+        for (self.instructions.items) |instruction| {
+            if (instruction.opcode == .dot_else or instruction.opcode == .dot_end) {
+                indent -= 1;
+            }
+            for (0..indent) |_| {
+                try w.print("    ", .{});
+            }
+            if (instruction.opcode == .dot_proc or instruction.opcode == .dot_else or instruction.opcode == .ifc or instruction.opcode == .ifu) {
+                indent += 1;
+            }
+
+            // Opcode
+            const opcode_str = instruction.opcode.toStr();
+            try w.print("{s}", .{opcode_str});
+
+            // Operands
+            for (0..instruction.operand_count) |i| {
+                if (i != 0) {
+                    try w.print(",", .{});
+                }
+                try w.print(" {s}", .{instruction.operands[i]});
+            }
+            try w.print("\n", .{});
+        }
+    }
+
+    pub fn addInstruction(self: *Block, opcode: Opcode, result: u32, operands: anytype) !void {
         var instruction: Instruction = undefined;
         instruction.opcode = opcode;
+        instruction.result = result;
         //for (0..4) |i| {
         //    if (i < operands.len) {
         //        instruction.operands[i] = operands[i];
@@ -143,34 +174,49 @@ pub const ProgramWriter = struct {
 
         try self.instructions.append(instruction);
     }
+};
+
+pub const ProgramWriter = struct {
+    allocator: std.mem.Allocator,
+    blocks: std.AutoHashMap(u32, Block),
+    active_block: u32,
+
+    pub fn init(allocator: std.mem.Allocator) ProgramWriter {
+        var self: ProgramWriter = undefined;
+        self.allocator = allocator;
+        self.blocks = std.AutoHashMap(u32, Block).init(allocator);
+
+        return self;
+    }
+
+    pub fn deinit(self: *ProgramWriter) void {
+        var it = self.blocks.iterator();
+        while (it.next()) |i| {
+            i.value_ptr.deinit();
+        }
+        self.blocks.deinit();
+    }
 
     pub fn write(self: *const ProgramWriter, w: *writer.Writer) !void {
-        var indent: u32 = 0;
-        for (self.instructions.items) |instruction| {
-            if (instruction.opcode == .dot_else or instruction.opcode == .dot_end) {
-                indent -= 1;
-            }
-            if (instruction.opcode != .label) {
-                for (0..indent) |_| {
-                    try w.print("    ", .{});
-                }
-            }
-            if (instruction.opcode == .dot_proc or instruction.opcode == .dot_else or instruction.opcode == .ifc or instruction.opcode == .ifu) {
-                indent += 1;
-            }
-            const instruction_str = instruction.opcode.toStr();
-            try w.print("{s}", .{instruction_str});
-            if (instruction.opcode == .label) {
-                try w.print("{s}:", .{instruction.operands[0]});
-            } else {
-                for (0..instruction.operand_count) |i| {
-                    if (i != 0) {
-                        try w.print(",", .{});
-                    }
-                    try w.print(" {s}", .{instruction.operands[i]});
-                }
-            }
-            try w.print("\n", .{});
+        try w.printLine(".proc main", .{});
+        var it = self.blocks.iterator();
+        while (it.next()) |i| {
+            try i.value_ptr.write(w);
         }
+        try w.printLine(".end", .{});
+    }
+
+    pub fn addBlock(self: *ProgramWriter, id: u32) !void {
+        const block = Block.init(self.allocator, id);
+        try self.blocks.put(id, block);
+        self.active_block = id;
+    }
+
+    pub fn getBlock(self: *ProgramWriter, id: u32) ?*Block {
+        return self.blocks.getPtr(id);
+    }
+
+    pub fn addInstruction(self: *ProgramWriter, opcode: Opcode, result: u32, operands: anytype) !void {
+        try self.blocks.getPtr(self.active_block).?.addInstruction(opcode, result, operands);
     }
 };

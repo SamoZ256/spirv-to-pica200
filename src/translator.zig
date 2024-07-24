@@ -129,8 +129,9 @@ pub const Translator = struct {
             .OpTypePointer => self.pica200_builder.createPointerType(instruction.result_id, instruction.operands[1]),
             // Instructions
             .OpNop => self.pica200_builder.createNop(),
-            .OpFunction => self.pica200_builder.createMain(),
-            .OpFunctionEnd => self.pica200_builder.createEnd(),
+            // TODO: don't ignore these
+            .OpFunction => {},
+            .OpFunctionEnd => {},
             .OpLabel => self.pica200_builder.createLabel(instruction.result_id),
             .OpConstant => self.pica200_builder.createConstant(instruction.result_id, instruction.result_type_id, instruction.operands[0]),
             .OpConstantComposite => self.pica200_builder.createConstantComposite(instruction.result_id, instruction.result_type_id, instruction.operands),
@@ -141,8 +142,7 @@ pub const Translator = struct {
             .OpAccessChain => self.pica200_builder.createAccessChain(instruction.result_id, instruction.operands[0], instruction.operands[1..instruction.operands.len], true),
             .OpCompositeConstruct => self.pica200_builder.createConstruct(instruction.result_id, instruction.result_type_id, instruction.operands),
             .OpSelect => self.pica200_builder.createSelect(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], instruction.operands[2]),
-            // HACK
-            .OpPhi => self.pica200_builder.id_map.put(instruction.result_id, pica200.base.Value.init("INVALID", pica200.base.INVALID_REGISTER, self.pica200_builder.type_map.get(instruction.result_type_id).?)),
+            .OpPhi => self.pica200_builder.createPhi(instruction.result_id, instruction.result_type_id, instruction.operands),
             // TODO: don't ignore this
             .OpSelectionMerge => {},
             // Math

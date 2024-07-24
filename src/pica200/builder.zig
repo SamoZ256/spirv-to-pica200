@@ -220,7 +220,7 @@ pub const Builder = struct {
                 // If neither can be src2, create a temporary register
                 var tmp = try self.createTempValue(src2.ty);
                 tmp.swizzle = src2.swizzle;
-                try self.program_writer.addInstruction(.mov, .{try self.getValueName(&tmp), try self.getValueName(src2)});
+                try self.program_writer.addInstruction(.mov, INVALID_ID, .{try self.getValueName(&tmp), try self.getValueName(src2)});
                 src2.* = tmp;
 
                 return false;
@@ -332,16 +332,8 @@ pub const Builder = struct {
     }
 
     // Instructions
-    pub fn createMain(self: *Builder) !void {
-        try self.program_writer.addInstruction(.dot_proc, .{"main"});
-    }
-
-    pub fn createEnd(self: *Builder) !void {
-        try self.program_writer.addInstruction(.dot_end, .{});
-    }
-
     pub fn createLabel(self: *Builder, id: u32) !void {
-        try self.program_writer.addInstruction(.label, .{try std.fmt.allocPrint(self.allocator.allocator(), "label{}", .{id})});
+        try self.program_writer.addBlock(id);
     }
 
     pub fn createConstant(self: *Builder, result: u32, ty: u32, val: u32) !void {
@@ -495,7 +487,7 @@ pub const Builder = struct {
     }
 
     pub fn createNop(self: *Builder) !void {
-        try self.program_writer.addInstruction(.nop, .{});
+        try self.program_writer.addInstruction(.nop, INVALID_ID, .{});
     }
 
     pub fn createLoad(self: *Builder, result: u32, ptr: u32) !void {
@@ -523,7 +515,7 @@ pub const Builder = struct {
         }
 
         const val_v = self.id_map.get(val).?;
-        try self.program_writer.addInstruction(.mov, .{try self.getValueName(&ptr_v), try self.getValueName(&val_v)});
+        try self.program_writer.addInstruction(.mov, INVALID_ID, .{try self.getValueName(&ptr_v), try self.getValueName(&val_v)});
     }
 
     pub fn createAccessChain(self: *Builder, result: u32, ptr: u32, indices: []const u32, indices_are_ids: bool) !void {
@@ -554,11 +546,10 @@ pub const Builder = struct {
         for (0..components.len) |i| {
             const component = self.id_map.get(components[i]).?;
             const index_v = try self.indexToValue(@intCast(i), false);
-            try self.program_writer.addInstruction(.mov, .{try self.getValueName(&try value.indexInto(self.allocator.allocator(), index_v)), try self.getValueName(&component)});
+            try self.program_writer.addInstruction(.mov, result, .{try self.getValueName(&try value.indexInto(self.allocator.allocator(), index_v)), try self.getValueName(&component)});
         }
     }
 
-    // TODO: optimize this
     pub fn createSelect(self: *Builder, result: u32, ty: u32, cond: u32, a: u32, b: u32) !void {
         self.assertCmpOwner(cond);
 
@@ -571,16 +562,48 @@ pub const Builder = struct {
         try self.id_map.put(result, value);
 
         // Jump to true block if condition is true
-        try self.program_writer.addInstruction(.ifc, .{try self.getValueName(&cond_v)});
+        try self.program_writer.addInstruction(.ifc, INVALID_ID, .{try self.getValueName(&cond_v)});
 
         // True block
-        try self.program_writer.addInstruction(.mov, .{try self.getValueName(&value), try self.getValueName(&a_v)});
+        try self.program_writer.addInstruction(.mov, result, .{try self.getValueName(&value), try self.getValueName(&a_v)});
 
         // False block
-        try self.program_writer.addInstruction(.dot_else, .{});
-        try self.program_writer.addInstruction(.mov, .{try self.getValueName(&value), try self.getValueName(&b_v)});
+        try self.program_writer.addInstruction(.dot_else, INVALID_ID, .{});
+        try self.program_writer.addInstruction(.mov, result, .{try self.getValueName(&value), try self.getValueName(&b_v)});
 
-        try self.program_writer.addInstruction(.dot_end, .{});
+        try self.program_writer.addInstruction(.dot_end, INVALID_ID, .{});
+    }
+
+    pub fn createPhi(self: *Builder, result: u32, ty: u32, operands: []const u32) !void {
+        const type_v = self.type_map.get(ty).?;
+
+        const value = base.Value.init("r", self.getAvailableRegister(), type_v);
+        try self.id_map.put(result, value);
+
+        for (0..operands.len / 2) |i| {
+            const var_id = operands[i * 2];
+            const block_id = operands[i * 2 + 1];
+            const var_v = self.id_map.get(var_id).?;
+            const block = self.program_writer.getBlock(block_id).?;
+
+            var found = false;
+            var j: usize = block.instructions.items.len;
+            while (j > 0) {
+                j -= 1;
+                var instr = block.instructions.items[j];
+                if (instr.result == var_id) {
+                    // Override the result
+                    instr.result = result;
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found) {
+                // TODO: add this instruction before any branch instruction
+                try block.addInstruction(.mov, result, .{try self.getValueName(&value), try self.getValueName(&var_v)});
+            }
+        }
     }
 
     // negate can have 3 possible values: -1 => negate lhs, 0 => don't negate, 1 => negate rhs
@@ -600,7 +623,7 @@ pub const Builder = struct {
         const negate1_str = if (neg == -1) "-" else "";
         const negate2_str = if (neg ==  1) "-" else "";
         // TODO: check how many components the vector has
-        try self.program_writer.addInstruction(.add, .{try self.getValueName(&value), try std.fmt.allocPrint(self.allocator.allocator(), "{s}{s}", .{negate1_str, try self.getValueName(&lhs_v)}), try std.fmt.allocPrint(self.allocator.allocator(), "{s}{s}", .{negate2_str, try self.getValueName(&rhs_v)})});
+        try self.program_writer.addInstruction(.add, result, .{try self.getValueName(&value), try std.fmt.allocPrint(self.allocator.allocator(), "{s}{s}", .{negate1_str, try self.getValueName(&lhs_v)}), try std.fmt.allocPrint(self.allocator.allocator(), "{s}{s}", .{negate2_str, try self.getValueName(&rhs_v)})});
     }
 
     pub fn createMul(self: *Builder, result: u32, ty: u32, lhs: u32, rhs: u32, invert: bool) !void {
@@ -619,11 +642,11 @@ pub const Builder = struct {
             // TODO: check how many components
             for (0..4) |i| {
                 const index_v = try self.indexToValue(@intCast(i), false);
-                try self.program_writer.addInstruction(.rcp, .{try self.getValueName(&try new_rhs_v.indexInto(self.allocator.allocator(), index_v)), try self.getValueName(&rhs_v)});
+                try self.program_writer.addInstruction(.rcp, INVALID_ID, .{try self.getValueName(&try new_rhs_v.indexInto(self.allocator.allocator(), index_v)), try self.getValueName(&rhs_v)});
             }
             rhs_v = new_rhs_v;
         }
-        try self.program_writer.addInstruction(.mul, .{try self.getValueName(&value), try self.getValueName(&lhs_v), try self.getValueName(&rhs_v)});
+        try self.program_writer.addInstruction(.mul, result, .{try self.getValueName(&value), try self.getValueName(&lhs_v), try self.getValueName(&rhs_v)});
     }
 
     pub fn createMatrixTimesMatrix(_: *Builder, _: u32, _: u32, _: u32, _: u32) !void {
@@ -642,7 +665,7 @@ pub const Builder = struct {
             const index_v = try self.indexToValue(@intCast(i), false);
             const val = try value.indexInto(self.allocator.allocator(), index_v);
             const mtx = try mat_v.indexInto(self.allocator.allocator(), index_v);
-            try self.program_writer.addInstruction(.dp4, .{try self.getValueName(&val), try self.getValueName(&mtx), try self.getValueName(&vec_v)});
+            try self.program_writer.addInstruction(.dp4, INVALID_ID, .{try self.getValueName(&val), try self.getValueName(&mtx), try self.getValueName(&vec_v)});
         }
     }
 
@@ -663,12 +686,13 @@ pub const Builder = struct {
 
         const cmp_str = c_mode.toStr();
         //const cmp2_str = cmp_modes[1].toStr();
-        try self.program_writer.addInstruction(.cmp, .{try self.getValueName(&lhs_v), cmp_str, cmp_str, try self.getValueName(&rhs_v)});
+        try self.program_writer.addInstruction(.cmp, INVALID_ID, .{try self.getValueName(&lhs_v), cmp_str, cmp_str, try self.getValueName(&rhs_v)});
     }
 
+    // TODO: optimize this
     pub fn createBranch(self: *Builder, b: u32) !void {
-        // TODO: check if this is correct
-        try self.program_writer.addInstruction(.jmpu, .{"i_ones.x", try std.fmt.allocPrint(self.allocator.allocator(), "label{}", .{b})});
+        try self.program_writer.addInstruction(.cmp, INVALID_ID, .{"i_ones.x", "eq", "eq", "i_ones.x"});
+        try self.program_writer.addInstruction(.jmpc, INVALID_ID, .{"cmp.x", try std.fmt.allocPrint(self.allocator.allocator(), "label{}", .{b})});
     }
 
     pub fn createBranchConditional(self: *Builder, cond: u32, true_b: u32, false_b: u32) !void {
@@ -676,8 +700,8 @@ pub const Builder = struct {
 
         const cond_v = self.id_map.get(cond).?;
 
-        try self.program_writer.addInstruction(.jmpc, .{try self.getValueName(&cond_v), try std.fmt.allocPrint(self.allocator.allocator(), "label{}", .{true_b})});
-        try self.program_writer.addInstruction(.jmpc, .{try std.fmt.allocPrint(self.allocator.allocator(), "!{s}", .{try self.getValueName(&cond_v)}), try std.fmt.allocPrint(self.allocator.allocator(), "label{}", .{false_b})});
+        try self.program_writer.addInstruction(.jmpc, INVALID_ID, .{try self.getValueName(&cond_v), try std.fmt.allocPrint(self.allocator.allocator(), "label{}", .{true_b})});
+        try self.program_writer.addInstruction(.jmpc, INVALID_ID, .{try std.fmt.allocPrint(self.allocator.allocator(), "!{s}", .{try self.getValueName(&cond_v)}), try std.fmt.allocPrint(self.allocator.allocator(), "label{}", .{false_b})});
     }
 
     // TODO: implement other branch instructions
@@ -691,63 +715,63 @@ pub const Builder = struct {
         switch (std_function) {
             .floor => {
                 const arg_v = self.id_map.get(arguments[0]).?;
-                try self.program_writer.addInstruction(.flr, .{try self.getValueName(&value), try self.getValueName(&arg_v)});
+                try self.program_writer.addInstruction(.flr, result, .{try self.getValueName(&value), try self.getValueName(&arg_v)});
             },
             .radians => {
                 var arg_v = self.id_map.get(arguments[0]).?;
                 // TODO: move this into a utility function
                 if (!arg_v.canBeSrc2()) {
                     const new_arg_v = try self.createTempValue(arg_v.ty);
-                    try self.program_writer.addInstruction(.mov, .{try self.getValueName(&new_arg_v), try self.getValueName(&arg_v)});
+                    try self.program_writer.addInstruction(.mov, INVALID_ID, .{try self.getValueName(&new_arg_v), try self.getValueName(&arg_v)});
                     arg_v = new_arg_v;
                 }
-                try self.program_writer.addInstruction(.mul, .{try self.getValueName(&value), "deg_to_rad", try self.getValueName(&arg_v)});
+                try self.program_writer.addInstruction(.mul, result, .{try self.getValueName(&value), "deg_to_rad", try self.getValueName(&arg_v)});
             },
             .degrees => {
                 var arg_v = self.id_map.get(arguments[0]).?;
                 if (!arg_v.canBeSrc2()) {
                     const new_arg_v = try self.createTempValue(arg_v.ty);
-                    try self.program_writer.addInstruction(.mov, .{try self.getValueName(&new_arg_v), try self.getValueName(&arg_v)});
+                    try self.program_writer.addInstruction(.mov, INVALID_ID, .{try self.getValueName(&new_arg_v), try self.getValueName(&arg_v)});
                     arg_v = new_arg_v;
                 }
-                try self.program_writer.addInstruction(.mul, .{try self.getValueName(&value), "rad_to_deg", try self.getValueName(&arg_v)});
+                try self.program_writer.addInstruction(.mul, result, .{try self.getValueName(&value), "rad_to_deg", try self.getValueName(&arg_v)});
             },
             .exp2 => {
                 const arg_v = self.id_map.get(arguments[0]).?;
-                try self.program_writer.addInstruction(.ex2, .{try self.getValueName(&value), try self.getValueName(&arg_v)});
+                try self.program_writer.addInstruction(.ex2, result, .{try self.getValueName(&value), try self.getValueName(&arg_v)});
             },
             .log2 => {
                 const arg_v = self.id_map.get(arguments[0]).?;
-                try self.program_writer.addInstruction(.lg2, .{try self.getValueName(&value), try self.getValueName(&arg_v)});
+                try self.program_writer.addInstruction(.lg2, result, .{try self.getValueName(&value), try self.getValueName(&arg_v)});
             },
             .sqrt => {
                 const arg_v = self.id_map.get(arguments[0]).?;
-                try self.program_writer.addInstruction(.rsq, .{try self.getValueName(&value), try self.getValueName(&arg_v)});
-                try self.program_writer.addInstruction(.rcp, .{try self.getValueName(&value), try self.getValueName(&value)});
+                try self.program_writer.addInstruction(.rsq, result, .{try self.getValueName(&value), try self.getValueName(&arg_v)});
+                try self.program_writer.addInstruction(.rcp, result, .{try self.getValueName(&value), try self.getValueName(&value)});
             },
             .inverse_sqrt => {
                 const arg_v = self.id_map.get(arguments[0]).?;
-                try self.program_writer.addInstruction(.rsq, .{try self.getValueName(&value), try self.getValueName(&arg_v)});
+                try self.program_writer.addInstruction(.rsq, result, .{try self.getValueName(&value), try self.getValueName(&arg_v)});
             },
             .min => {
                 var arg1_v = self.id_map.get(arguments[0]).?;
                 var arg2_v = self.id_map.get(arguments[1]).?;
                 _ = try self.swapIfNeeded(&arg1_v, &arg2_v);
-                try self.program_writer.addInstruction(.min, .{try self.getValueName(&value), try self.getValueName(&arg1_v), try self.getValueName(&arg2_v)});
+                try self.program_writer.addInstruction(.min, result, .{try self.getValueName(&value), try self.getValueName(&arg1_v), try self.getValueName(&arg2_v)});
             },
             .max => {
                 var arg1_v = self.id_map.get(arguments[0]).?;
                 var arg2_v = self.id_map.get(arguments[1]).?;
                 _ = try self.swapIfNeeded(&arg1_v, &arg2_v);
-                try self.program_writer.addInstruction(.max, .{try self.getValueName(&value), try self.getValueName(&arg1_v), try self.getValueName(&arg2_v)});
+                try self.program_writer.addInstruction(.max, result, .{try self.getValueName(&value), try self.getValueName(&arg1_v), try self.getValueName(&arg2_v)});
             },
             .clamp => {
                 var arg1_v = self.id_map.get(arguments[0]).?;
                 var arg2_v = self.id_map.get(arguments[1]).?;
                 const arg3_v = self.id_map.get(arguments[2]).?;
                 _ = try self.swapIfNeeded(&arg1_v, &arg2_v);
-                try self.program_writer.addInstruction(.max, .{try self.getValueName(&value), try self.getValueName(&arg1_v), try self.getValueName(&arg2_v)});
-                try self.program_writer.addInstruction(.min, .{try self.getValueName(&value), try self.getValueName(&arg3_v), try self.getValueName(&value)});
+                try self.program_writer.addInstruction(.max, result, .{try self.getValueName(&value), try self.getValueName(&arg1_v), try self.getValueName(&arg2_v)});
+                try self.program_writer.addInstruction(.min, result, .{try self.getValueName(&value), try self.getValueName(&arg3_v), try self.getValueName(&value)});
             },
             .mix => {
                 var arg1_v = self.id_map.get(arguments[0]).?;
@@ -757,20 +781,20 @@ pub const Builder = struct {
                 const temp = try self.createTempValue(type_v);
 
                 // value = arg1 * (1 - arg3)
-                try self.program_writer.addInstruction(.add, .{try self.getValueName(&temp), "f_ones", try std.fmt.allocPrint(self.allocator.allocator(), "-{s}", .{try self.getValueName(&arg3_v)})});
-                try self.program_writer.addInstruction(.mul, .{try self.getValueName(&value), try self.getValueName(&arg1_v), try self.getValueName(&temp)});
+                try self.program_writer.addInstruction(.add, INVALID_ID, .{try self.getValueName(&temp), "f_ones", try std.fmt.allocPrint(self.allocator.allocator(), "-{s}", .{try self.getValueName(&arg3_v)})});
+                try self.program_writer.addInstruction(.mul, result, .{try self.getValueName(&value), try self.getValueName(&arg1_v), try self.getValueName(&temp)});
 
                 // value = value + arg2 * arg3
-                try self.program_writer.addInstruction(.mul, .{try self.getValueName(&temp), try self.getValueName(&arg2_v), try self.getValueName(&arg3_v)});
-                try self.program_writer.addInstruction(.add, .{try self.getValueName(&value), try self.getValueName(&value), try self.getValueName(&temp)});
+                try self.program_writer.addInstruction(.mul, INVALID_ID, .{try self.getValueName(&temp), try self.getValueName(&arg2_v), try self.getValueName(&arg3_v)});
+                try self.program_writer.addInstruction(.add, result, .{try self.getValueName(&value), try self.getValueName(&value), try self.getValueName(&temp)});
             },
             .fma => {
                 var arg1_v = self.id_map.get(arguments[0]).?;
                 var arg2_v = self.id_map.get(arguments[1]).?;
                 const arg3_v = self.id_map.get(arguments[2]).?;
                 _ = try self.swapIfNeeded(&arg1_v, &arg2_v);
-                try self.program_writer.addInstruction(.mul, .{try self.getValueName(&value), try self.getValueName(&arg1_v), try self.getValueName(&arg2_v)});
-                try self.program_writer.addInstruction(.add, .{try self.getValueName(&value), try self.getValueName(&arg3_v), try self.getValueName(&value)});
+                try self.program_writer.addInstruction(.mul, result, .{try self.getValueName(&value), try self.getValueName(&arg1_v), try self.getValueName(&arg2_v)});
+                try self.program_writer.addInstruction(.add, result, .{try self.getValueName(&value), try self.getValueName(&arg3_v), try self.getValueName(&value)});
             },
             // TODO: implement the rest
             else => {
