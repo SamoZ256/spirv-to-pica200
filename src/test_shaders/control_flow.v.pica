@@ -37,8 +37,8 @@ label5:
     jmpc cmp.x, label24
     jmpc !cmp.x, label26
 label24:
-    mov r15.x, const9.x
     cmp i_ones.x, eq, eq, i_ones.x
+    mov r15.x, const9.x
     jmpc cmp.x, label25
 label26:
     mov r1.x, const59.x

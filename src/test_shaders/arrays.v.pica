@@ -29,7 +29,6 @@
 
 .proc main
 label5:
-    mov r14.x, const9.x
     mov r0.x, uniform1[const35.x].x
     add r1.x, uniform1[const13.x].x, r0.x
     add r0.x, uniform1[const162.x].x, r1.x
@@ -41,13 +40,14 @@ label5:
     lg2 r0.x, uniform1[uniform0.x].x
     add r2.x, r1.x, r0.x
     cmp i_ones.x, eq, eq, i_ones.x
+    mov r14.x, const9.x
     jmpc cmp.x, label46
 label47:
-    mov r15.x, r0.x
-    mov r14.x, r1.x
     add r0.x, r15.x, r14.x
     add r1.x, const57.x, r14.x
     cmp i_ones.x, eq, eq, i_ones.x
+    mov r15.x, r0.x
+    mov r14.x, r1.x
     jmpc cmp.x, label46
 label48:
     mov r0.x, v0.x

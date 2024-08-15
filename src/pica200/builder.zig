@@ -645,8 +645,8 @@ pub const Builder = struct {
 
             if (!found) {
                 const var_v = try self.getValue(var_id, &type_v);
-                // TODO: add this instruction before any branch instruction
-                try block.addHeaderInstruction(.mov, result, .{try self.getValueName(&value), try self.getValueName(&var_v)});
+                // We need to insert the instruction before every jump instruction
+                try block.addBeforeJumpInstruction(.mov, result, .{try self.getValueName(&value), try self.getValueName(&var_v)});
             }
         }
     }

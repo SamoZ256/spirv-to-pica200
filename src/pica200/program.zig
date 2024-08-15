@@ -95,19 +95,19 @@ const Instruction = struct {
 pub const Block = struct {
     id: u32,
     instructions: std.ArrayList(Instruction),
-    header_instructions: std.ArrayList(Instruction),
+    before_jump_instructions: std.ArrayList(Instruction),
 
     pub fn init(allocator: std.mem.Allocator, id: u32) Block {
         var self: Block = undefined;
         self.id = id;
         self.instructions = std.ArrayList(Instruction).init(allocator);
-        self.header_instructions = std.ArrayList(Instruction).init(allocator);
+        self.before_jump_instructions = std.ArrayList(Instruction).init(allocator);
 
         return self;
     }
 
     pub fn deinit(self: *Block) void {
-        self.header_instructions.deinit();
+        self.before_jump_instructions.deinit();
         self.instructions.deinit();
     }
 
@@ -140,10 +140,20 @@ pub const Block = struct {
         try w.printLine("label{}:", .{self.id});
 
         var indent: u32 = 1;
-        for (self.header_instructions.items) |instruction| {
-            try writeInstruction(w, &indent, instruction);
-        }
+        var write_before_jump_instructions = true;
         for (self.instructions.items) |instruction| {
+            switch (instruction.opcode) {
+                .jmpc, .jmpu => {
+                    if (write_before_jump_instructions) {
+                        for (self.before_jump_instructions.items) |before_jump_instruction| {
+                            try writeInstruction(w, &indent, before_jump_instruction);
+                        }
+                        write_before_jump_instructions = false;
+                    }
+                },
+                else => write_before_jump_instructions = true,
+            }
+
             try writeInstruction(w, &indent, instruction);
         }
     }
@@ -189,8 +199,8 @@ pub const Block = struct {
         try self.instructions.append(createInstruction(opcode, result, operands));
     }
 
-    pub fn addHeaderInstruction(self: *Block, opcode: Opcode, result: u32, operands: anytype) !void {
-        try self.header_instructions.append(createInstruction(opcode, result, operands));
+    pub fn addBeforeJumpInstruction(self: *Block, opcode: Opcode, result: u32, operands: anytype) !void {
+        try self.before_jump_instructions.append(createInstruction(opcode, result, operands));
     }
 };
 
