@@ -37,14 +37,14 @@ label5:
     jmpc cmp.x, label24
     jmpc !cmp.x, label26
 label24:
-    cmp i_ones.x, eq, eq, i_ones.x
     mov r15.x, const9.x
+    cmp i_ones.x, eq, eq, i_ones.x
     jmpc cmp.x, label25
 label26:
     mov r1.x, const59.x
     mul r2.x, uniform1.x, r1.x
     add r1.x, r0.x, r2.x
-    mul r0.x, const32.x, r1.x
+    mul r15.x, const32.x, r1.x
     cmp i_ones.x, eq, eq, i_ones.x
     jmpc cmp.x, label25
 label25:

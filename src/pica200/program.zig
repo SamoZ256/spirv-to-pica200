@@ -92,22 +92,31 @@ const Instruction = struct {
     operand_count: usize,
 };
 
+const ValueExport = struct {
+    result: u32,
+    value: u32,
+    result_name: []const u8,
+    value_name: []const u8,
+};
+
 pub const Block = struct {
+    allocator: std.mem.Allocator,
     id: u32,
     instructions: std.ArrayList(Instruction),
-    before_jump_instructions: std.ArrayList(Instruction),
+    value_exports: std.ArrayList(ValueExport),
 
     pub fn init(allocator: std.mem.Allocator, id: u32) Block {
         var self: Block = undefined;
+        self.allocator = allocator;
         self.id = id;
         self.instructions = std.ArrayList(Instruction).init(allocator);
-        self.before_jump_instructions = std.ArrayList(Instruction).init(allocator);
+        self.value_exports = std.ArrayList(ValueExport).init(allocator);
 
         return self;
     }
 
     pub fn deinit(self: *Block) void {
-        self.before_jump_instructions.deinit();
+        self.value_exports.deinit();
         self.instructions.deinit();
     }
 
@@ -139,21 +148,32 @@ pub const Block = struct {
     pub fn write(self: *const Block, w: *writer.Writer) !void {
         try w.printLine("label{}:", .{self.id});
 
-        var indent: u32 = 1;
-        var write_before_jump_instructions = true;
-        for (self.instructions.items) |instruction| {
-            switch (instruction.opcode) {
-                .jmpc, .jmpu => {
-                    if (write_before_jump_instructions) {
-                        for (self.before_jump_instructions.items) |before_jump_instruction| {
-                            try writeInstruction(w, &indent, before_jump_instruction);
-                        }
-                        write_before_jump_instructions = false;
-                    }
-                },
-                else => write_before_jump_instructions = true,
+        var header_instructions = std.ArrayList(Instruction).init(self.allocator);
+        defer header_instructions.deinit();
+
+        // First handle value exports
+        for (self.value_exports.items) |value_export| {
+            var found = false;
+            for (self.instructions.items) |*instruction| {
+                if (instruction.result == value_export.value) {
+                    instruction.result = value_export.result;
+                    instruction.operands[0] = value_export.result_name;
+                    found = true;
+                    break;
+                }
             }
 
+            // If not found, we can just use a mov instruction
+            if (!found) {
+                try header_instructions.append(createInstruction(.mov, value_export.result, .{value_export.result_name, value_export.value_name}));
+            }
+        }
+
+        var indent: u32 = 1;
+        for (header_instructions.items) |instruction| {
+            try writeInstruction(w, &indent, instruction);
+        }
+        for (self.instructions.items) |instruction| {
             try writeInstruction(w, &indent, instruction);
         }
     }
@@ -199,8 +219,8 @@ pub const Block = struct {
         try self.instructions.append(createInstruction(opcode, result, operands));
     }
 
-    pub fn addBeforeJumpInstruction(self: *Block, opcode: Opcode, result: u32, operands: anytype) !void {
-        try self.before_jump_instructions.append(createInstruction(opcode, result, operands));
+    pub fn addValueExport(self: *Block, result: u32, value: u32, result_name: []const u8, value_name: []const u8) !void {
+        try self.value_exports.append(.{ .result = result, .value = value, .result_name = result_name, .value_name = value_name });
     }
 };
 

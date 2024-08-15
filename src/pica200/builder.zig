@@ -628,26 +628,10 @@ pub const Builder = struct {
         for (0..operands.len / 2) |i| {
             const var_id = operands[i * 2];
             const block_id = operands[i * 2 + 1];
+            const var_v = try self.getValue(var_id, &type_v);
             const block = try self.program_writer.getBlock(block_id);
 
-            var found = false;
-            var j: usize = block.instructions.items.len;
-            while (j > 0) {
-                j -= 1;
-                var instr = block.instructions.items[j];
-                if (instr.result == var_id) {
-                    // Override the result
-                    instr.result = result;
-                    found = true;
-                    break;
-                }
-            }
-
-            if (!found) {
-                const var_v = try self.getValue(var_id, &type_v);
-                // We need to insert the instruction before every jump instruction
-                try block.addBeforeJumpInstruction(.mov, result, .{try self.getValueName(&value), try self.getValueName(&var_v)});
-            }
+            try block.addValueExport(result, var_id, try self.getValueName(&value), try self.getValueName(&var_v));
         }
     }
 
