@@ -37,9 +37,9 @@ label5:
     jmpc cmp.x, label24
     jmpc !cmp.x, label26
 label24:
+    mov r15.x, const9.x
     cmp i_ones.x, eq, eq, i_ones.x
     jmpc cmp.x, label25
-    mov r0.x, const9.x
 label26:
     mov r1.x, const59.x
     mul r2.x, uniform1.x, r1.x
@@ -48,10 +48,10 @@ label26:
     cmp i_ones.x, eq, eq, i_ones.x
     jmpc cmp.x, label25
 label25:
-    mov r1.x, v0.x
-    mov r1.y, v0.y
-    mov r1.z, r0.x
-    mov r1.w, const17.x
-    mov outpos, r1
+    mov r0.x, v0.x
+    mov r0.y, v0.y
+    mov r0.z, r15.x
+    mov r0.w, const17.x
+    mov outpos, r0
 .end
 

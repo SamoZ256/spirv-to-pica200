@@ -17,6 +17,10 @@ void main() {
     }
     z += log2(u[index]);
 
+    for (float i = 0.0; i < 17.0f; i += 1.0f) {
+        z += i;
+    }
+
     // Dummy position
     gl_Position = vec4(a_position, z, 1.0);
 }

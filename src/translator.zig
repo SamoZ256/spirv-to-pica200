@@ -175,6 +175,8 @@ pub const Translator = struct {
             .OpSource => {},
             .OpReturn => {},
             .OpTypeFunction => {},
+            // TODO: don't ignore this?
+            .OpLoopMerge => {},
             // TODO: use these for debugging
             .OpName => {},
             .OpMemberName => {},

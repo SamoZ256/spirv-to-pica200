@@ -95,50 +95,60 @@ const Instruction = struct {
 pub const Block = struct {
     id: u32,
     instructions: std.ArrayList(Instruction),
+    header_instructions: std.ArrayList(Instruction),
 
     pub fn init(allocator: std.mem.Allocator, id: u32) Block {
         var self: Block = undefined;
         self.id = id;
         self.instructions = std.ArrayList(Instruction).init(allocator);
+        self.header_instructions = std.ArrayList(Instruction).init(allocator);
 
         return self;
     }
 
     pub fn deinit(self: *Block) void {
+        self.header_instructions.deinit();
         self.instructions.deinit();
+    }
+
+    fn writeInstruction(w: *writer.Writer, indent: *u32, instruction: Instruction) !void {
+        if (instruction.opcode == .dot_else or instruction.opcode == .dot_end) {
+            indent.* -= 1;
+        }
+        for (0..indent.*) |_| {
+            try w.print("    ", .{});
+        }
+        if (instruction.opcode == .dot_proc or instruction.opcode == .dot_else or instruction.opcode == .ifc or instruction.opcode == .ifu) {
+            indent.* += 1;
+        }
+
+        // Opcode
+        const opcode_str = instruction.opcode.toStr();
+        try w.print("{s}", .{opcode_str});
+
+        // Operands
+        for (0..instruction.operand_count) |i| {
+            if (i != 0) {
+                try w.print(",", .{});
+            }
+            try w.print(" {s}", .{instruction.operands[i]});
+        }
+        try w.print("\n", .{});
     }
 
     pub fn write(self: *const Block, w: *writer.Writer) !void {
         try w.printLine("label{}:", .{self.id});
 
         var indent: u32 = 1;
+        for (self.header_instructions.items) |instruction| {
+            try writeInstruction(w, &indent, instruction);
+        }
         for (self.instructions.items) |instruction| {
-            if (instruction.opcode == .dot_else or instruction.opcode == .dot_end) {
-                indent -= 1;
-            }
-            for (0..indent) |_| {
-                try w.print("    ", .{});
-            }
-            if (instruction.opcode == .dot_proc or instruction.opcode == .dot_else or instruction.opcode == .ifc or instruction.opcode == .ifu) {
-                indent += 1;
-            }
-
-            // Opcode
-            const opcode_str = instruction.opcode.toStr();
-            try w.print("{s}", .{opcode_str});
-
-            // Operands
-            for (0..instruction.operand_count) |i| {
-                if (i != 0) {
-                    try w.print(",", .{});
-                }
-                try w.print(" {s}", .{instruction.operands[i]});
-            }
-            try w.print("\n", .{});
+            try writeInstruction(w, &indent, instruction);
         }
     }
 
-    pub fn addInstruction(self: *Block, opcode: Opcode, result: u32, operands: anytype) !void {
+    fn createInstruction(opcode: Opcode, result: u32, operands: anytype) Instruction {
         var instruction: Instruction = undefined;
         instruction.opcode = opcode;
         instruction.result = result;
@@ -172,7 +182,15 @@ pub const Block = struct {
         }
         instruction.operand_count = operands.len;
 
-        try self.instructions.append(instruction);
+        return instruction;
+    }
+
+    pub fn addInstruction(self: *Block, opcode: Opcode, result: u32, operands: anytype) !void {
+        try self.instructions.append(createInstruction(opcode, result, operands));
+    }
+
+    pub fn addHeaderInstruction(self: *Block, opcode: Opcode, result: u32, operands: anytype) !void {
+        try self.header_instructions.append(createInstruction(opcode, result, operands));
     }
 };
 
@@ -206,14 +224,13 @@ pub const ProgramWriter = struct {
         try w.printLine(".end", .{});
     }
 
-    pub fn addBlock(self: *ProgramWriter, id: u32) !void {
-        const block = Block.init(self.allocator, id);
-        try self.blocks.put(id, block);
-        self.active_block = id;
-    }
+    pub fn getBlock(self: *ProgramWriter, id: u32) !*Block {
+        const result = try self.blocks.getOrPut(id);
+        if (!result.found_existing) {
+            result.value_ptr.* = Block.init(self.allocator, id);
+        }
 
-    pub fn getBlock(self: *ProgramWriter, id: u32) ?*Block {
-        return self.blocks.getPtr(id);
+        return result.value_ptr;
     }
 
     pub fn addInstruction(self: *ProgramWriter, opcode: Opcode, result: u32, operands: anytype) !void {

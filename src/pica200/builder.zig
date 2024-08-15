@@ -61,6 +61,7 @@ pub const Builder = struct {
     buffer: [64 * 1024]u8,
     fba: std.heap.FixedBufferAllocator,
     id_map: std.AutoHashMap(u32, base.Value),
+    early_created_ids_map: std.AutoHashMap(u32, base.Value),
     type_map: std.AutoHashMap(u32, base.Type),
     decoration_map: std.AutoHashMap(u32, base.DecorationProperties),
 
@@ -87,6 +88,7 @@ pub const Builder = struct {
         self.allocator = std.heap.ArenaAllocator.init(allocator);
         self.fba = std.heap.FixedBufferAllocator.init(&self.buffer);
         self.id_map = std.AutoHashMap(u32, base.Value).init(allocator);
+        self.early_created_ids_map = std.AutoHashMap(u32, base.Value).init(allocator);
         self.type_map = std.AutoHashMap(u32, base.Type).init(allocator);
         // Allocate enough space for the all the types
         try self.type_map.ensureTotalCapacity(512);
@@ -138,6 +140,7 @@ pub const Builder = struct {
         self.type_map.unlockPointers();
         self.decoration_map.deinit();
         self.type_map.deinit();
+        self.early_created_ids_map.deinit();
         self.id_map.deinit();
         self.allocator.deinit();
     }
@@ -177,13 +180,26 @@ pub const Builder = struct {
     }
 
     // Utility
-    fn getAvailableRegister(self: *Builder) u8 {
+    fn getAvailableRegister(self: *Builder, is_conflicting: bool) u8 {
         var register: u8 = base.INVALID_REGISTER;
-        for (0..16) |i| {
-            if (!self.registers_occupancy[i]) {
-                register = @intCast(i);
-                self.registers_occupancy[i] = true;
-                break;
+        // TODO: clean this up
+        if (is_conflicting) {
+            var i: u8 = 16;
+            while (i > 0) {
+                i -= 1;
+                if (!self.registers_occupancy[i]) {
+                    register = @intCast(i);
+                    self.registers_occupancy[i] = true;
+                    break;
+                }
+            }
+        } else {
+            for (0..16) |i| {
+                if (!self.registers_occupancy[i]) {
+                    register = @intCast(i);
+                    self.registers_occupancy[i] = true;
+                    break;
+                }
             }
         }
 
@@ -192,6 +208,37 @@ pub const Builder = struct {
         }
 
         return register;
+    }
+
+    fn getResultVInternal(self: *Builder, result: u32, type_v: *const base.Type, is_conflicting: bool) !base.Value {
+        const value = base.Value.init("r", self.getAvailableRegister(is_conflicting), type_v.*);
+        try self.id_map.put(result, value);
+
+        return value;
+    }
+
+    fn getResultV(self: *Builder, result: u32, type_v: *const base.Type, is_conflicting: bool) !base.Value {
+        const value = self.early_created_ids_map.get(result);
+        if (value) |v| {
+            // TODO: make this so that it doesn't have to search the hash map twice
+            // TODO: uncomment
+            //self.early_created_ids_map.remove(result);
+            return v;
+        }
+
+        return self.getResultVInternal(result, type_v, is_conflicting);
+    }
+
+    fn getValue(self: *Builder, id: u32, type_v: *const base.Type) !base.Value {
+        const value = self.id_map.get(id);
+        if (value) |v| {
+            return v;
+        }
+
+        const value2 = try self.getResultVInternal(id, type_v, false);
+        try self.early_created_ids_map.put(id, value2);
+
+        return value2;
     }
 
     fn getValueName(self: *Builder, value: *const base.Value) ![]const u8 {
@@ -236,7 +283,7 @@ pub const Builder = struct {
     }
 
     fn createTempValue(self: *Builder, ty: base.Type) !base.Value {
-        const register = self.getAvailableRegister();
+        const register = self.getAvailableRegister(false);
         try self.temporary_registers.append(register);
 
         return base.Value.init("r", register, ty);
@@ -333,7 +380,8 @@ pub const Builder = struct {
 
     // Instructions
     pub fn createLabel(self: *Builder, id: u32) !void {
-        try self.program_writer.addBlock(id);
+        _ = try self.program_writer.getBlock(id);
+        self.program_writer.active_block = id;
     }
 
     pub fn createConstant(self: *Builder, result: u32, ty: u32, val: u32) !void {
@@ -470,7 +518,7 @@ pub const Builder = struct {
             },
             .uniform => std.fmt.allocPrint(self.allocator.allocator(), "uniform{}", .{decoration_props.?.location}),
             .function => blk: {
-                register = self.getAvailableRegister();
+                register = self.getAvailableRegister(false);
                 break :blk "r";
             },
         };
@@ -541,8 +589,7 @@ pub const Builder = struct {
     pub fn createConstruct(self: *Builder, result: u32, ty: u32, components: []const u32) !void {
         const type_v = self.type_map.get(ty).?;
 
-        var value = base.Value.init("r", self.getAvailableRegister(), type_v);
-        try self.id_map.put(result, value);
+        var value = try self.getResultV(result, &type_v, false);
         for (0..components.len) |i| {
             const component = self.id_map.get(components[i]).?;
             const index_v = try self.indexToValue(@intCast(i), false);
@@ -558,8 +605,7 @@ pub const Builder = struct {
         const cond_v = self.id_map.get(cond).?;
         const a_v = self.id_map.get(a).?;
         const b_v = self.id_map.get(b).?;
-        const value = base.Value.init("r", self.getAvailableRegister(), type_v);
-        try self.id_map.put(result, value);
+        const value = try self.getResultV(result, &type_v, false);
 
         // Jump to true block if condition is true
         try self.program_writer.addInstruction(.ifc, INVALID_ID, .{try self.getValueName(&cond_v)});
@@ -577,14 +623,12 @@ pub const Builder = struct {
     pub fn createPhi(self: *Builder, result: u32, ty: u32, operands: []const u32) !void {
         const type_v = self.type_map.get(ty).?;
 
-        const value = base.Value.init("r", self.getAvailableRegister(), type_v);
-        try self.id_map.put(result, value);
+        const value = try self.getResultV(result, &type_v, true);
 
         for (0..operands.len / 2) |i| {
             const var_id = operands[i * 2];
             const block_id = operands[i * 2 + 1];
-            const var_v = self.id_map.get(var_id).?;
-            const block = self.program_writer.getBlock(block_id).?;
+            const block = try self.program_writer.getBlock(block_id);
 
             var found = false;
             var j: usize = block.instructions.items.len;
@@ -600,8 +644,9 @@ pub const Builder = struct {
             }
 
             if (!found) {
+                const var_v = try self.getValue(var_id, &type_v);
                 // TODO: add this instruction before any branch instruction
-                try block.addInstruction(.mov, result, .{try self.getValueName(&value), try self.getValueName(&var_v)});
+                try block.addHeaderInstruction(.mov, result, .{try self.getValueName(&value), try self.getValueName(&var_v)});
             }
         }
     }
@@ -617,8 +662,7 @@ pub const Builder = struct {
             neg = -neg;
         }
 
-        const value = base.Value.init("r", self.getAvailableRegister(), type_v);
-        try self.id_map.put(result, value);
+        const value = try self.getResultV(result, &type_v, false);
 
         const negate1_str = if (neg == -1) "-" else "";
         const negate2_str = if (neg ==  1) "-" else "";
@@ -634,8 +678,7 @@ pub const Builder = struct {
         if (!invert) {
             _ = try self.swapIfNeeded(&lhs_v, &rhs_v);
         }
-        const value = base.Value.init("r", self.getAvailableRegister(), type_v);
-        try self.id_map.put(result, value);
+        const value = try self.getResultV(result, &type_v, false);
 
         if (invert) {
             var new_rhs_v = try self.createTempValue(type_v);
@@ -657,8 +700,7 @@ pub const Builder = struct {
         var mat_v = self.id_map.get(mat).?;
         var vec_v = self.id_map.get(vec).?;
 
-        const value = base.Value.init("r", self.getAvailableRegister(), vec_v.ty);
-        try self.id_map.put(result, value);
+        const value = try self.getResultV(result, &vec_v.ty, false);
 
         // TODO: check for how many components
         for (0..4) |i| {
@@ -709,8 +751,7 @@ pub const Builder = struct {
     // TODO: implement some of the harder std functions as well
     pub fn createStdCall(self: *Builder, result: u32, ty: u32, std_function: base.StdFunction, arguments: []const u32) !void {
         const type_v = self.type_map.get(ty).?;
-        const value = base.Value.init("r", self.getAvailableRegister(), type_v);
-        try self.id_map.put(result, value);
+        const value = try self.getResultV(result, &type_v, false);
 
         switch (std_function) {
             .floor => {
