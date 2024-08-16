@@ -3,18 +3,13 @@
 .fvec uniform2
 
 .constf shared_const0(0.0, 1.0, 0.0174532925, 57.295779513)
-.consti shared_const1(0, 1, 0, 0)
-.consti shared_const2(0, 0, 0, 0)
-.constf shared_const3(1e0, 0e0, 0e0, 0e0)
+.constf shared_const2(1e0, 0e0, 0e0, 0e0)
 
 .alias f_zeros shared_const0.xxxx
 .alias f_ones shared_const0.yyyy
 .alias deg_to_rad shared_const0.zzzz
 .alias rad_to_deg shared_const0.wwww
-.alias i_zeros shared_const1.xxxx
-.alias i_ones shared_const1.yyyy
-.alias const78 shared_const2.xxxx
-.alias const84 shared_const3.xxxx
+.alias const84 shared_const2.xxxx
 
 .out outpos position
 
@@ -49,10 +44,11 @@ label5:
     min r0.x, uniform2.x, r0.x
     add r2.x, r1.x, r0.x
     mov r1.x, uniform1.x
-    add r3.x, f_ones, -uniform2.x
-    mul r0.x, uniform0.x, r3.x
-    mul r3.x, r1.x, uniform2.x
-    add r0.x, r0.x, r3.x
+    mov r3.x, uniform2.x
+    add r4.x, f_ones, -r3.x
+    mul r0.x, uniform0.x, r4.x
+    mul r4.x, r1.x, r3.x
+    add r0.x, r0.x, r4.x
     add r1.x, r2.x, r0.x
     mov r2.x, uniform1.x
     mul r0.x, uniform0.x, r2.x

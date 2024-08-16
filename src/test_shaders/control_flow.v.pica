@@ -2,24 +2,19 @@
 .fvec uniform1
 
 .constf shared_const0(0.0, 1.0, 0.0174532925, 57.295779513)
-.consti shared_const1(0, 1, 0, 0)
-.constf shared_const3(0e0, 1e0, -1e0, 7e1)
-.consti shared_const2(0, 0, 0, 0)
-.constf shared_const4(7.709e1, 1e-2, 0e0, 0e0)
+.constf shared_const2(0e0, 1e0, -1e0, 7e1)
+.constf shared_const3(7.709e1, 1e-2, 0e0, 0e0)
 
 .alias f_zeros shared_const0.xxxx
 .alias f_ones shared_const0.yyyy
 .alias deg_to_rad shared_const0.zzzz
 .alias rad_to_deg shared_const0.wwww
-.alias i_zeros shared_const1.xxxx
-.alias i_ones shared_const1.yyyy
-.alias const9 shared_const3.xxxx
-.alias const17 shared_const3.yyyy
-.alias const19 shared_const3.zzzz
-.alias const22 shared_const3.wwww
-.alias const32 shared_const4.xxxx
-.alias const43 shared_const2.xxxx
-.alias const59 shared_const4.yyyy
+.alias const9 shared_const2.xxxx
+.alias const17 shared_const2.yyyy
+.alias const19 shared_const2.zzzz
+.alias const22 shared_const2.wwww
+.alias const32 shared_const3.xxxx
+.alias const59 shared_const3.yyyy
 
 .out outpos position
 

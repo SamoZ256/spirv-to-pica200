@@ -89,7 +89,7 @@ pub const Builder = struct {
     program_writer: program.ProgramWriter,
 
     constant_counter: u32,
-    int_constant: ConstantDeclaration,
+    //int_constant: ConstantDeclaration,
     float_constant: ConstantDeclaration,
 
     registers_occupancy: [16]bool,
@@ -132,11 +132,7 @@ pub const Builder = struct {
         try self.aliases.printLine(".alias deg_to_rad shared_const0.zzzz", .{});
         try self.aliases.printLine(".alias rad_to_deg shared_const0.wwww", .{});
 
-        try self.constants.printLine(".consti shared_const1(0, 1, 0, 0)", .{});
-        try self.aliases.printLine(".alias i_zeros shared_const1.xxxx", .{});
-        try self.aliases.printLine(".alias i_ones shared_const1.yyyy", .{});
-
-        self.int_constant = ConstantDeclaration.init(&self.constant_counter, .{ .int = 0 });
+        //self.int_constant = ConstantDeclaration.init(&self.constant_counter, .{ .int = 0 });
         self.float_constant = ConstantDeclaration.init(&self.constant_counter, .{ .float = 0.0 });
     }
 
@@ -160,7 +156,7 @@ pub const Builder = struct {
     }
 
     pub fn write(self: *Builder, w: anytype) !void {
-        try self.int_constant.flush(self.allocator.allocator(), &self.constants);
+        //try self.int_constant.flush(self.allocator.allocator(), &self.constants);
         try self.float_constant.flush(self.allocator.allocator(), &self.constants);
 
         try self.program_writer.write(&self.body);
@@ -419,37 +415,44 @@ pub const Builder = struct {
             else => std.debug.panic("unsupported constant type\n", .{}),
         };
 
-        var value = base.Value.init(try std.fmt.allocPrint(self.allocator.allocator(), "const{}", .{result}), base.INVALID_REGISTER, type_v);
+        const name: []const u8 = switch (constant) {
+            .boolean => |boolean| blk: {
+                if (boolean) {
+                    break :blk "true";
+                } else {
+                    break :blk "false";
+                }
+            },
+            .int => |int| try std.fmt.allocPrint(self.allocator.allocator(), "{}", .{int}),
+            .uint => |uint| try std.fmt.allocPrint(self.allocator.allocator(), "{}", .{uint}),
+            .float => try std.fmt.allocPrint(self.allocator.allocator(), "const{}", .{result}),
+            else => "UNDEFINED",
+        };
+
+        var value = base.Value.init(name, base.INVALID_REGISTER, type_v);
         value.constant = constant;
         try self.id_map.put(result, value);
 
-        // TODO: move this into a helper function
-        const constant_index = switch (constant) {
-            .int => blk: {
-                try self.int_constant.flushIfFull(self.allocator.allocator(), &self.constants, &self.constant_counter);
-                const component_index = self.int_constant.counter;
-                self.int_constant.push(constant);
-                break :blk .{ self.int_constant.index, component_index };
-            },
-            .float => blk: {
+        switch (constant) {
+            .float => {
                 try self.float_constant.flushIfFull(self.allocator.allocator(), &self.constants, &self.constant_counter);
                 const component_index = self.float_constant.counter;
                 self.float_constant.push(constant);
-                break :blk .{ self.float_constant.index, component_index };
+                //break :blk .{ self.float_constant.index, component_index };
+
+                if (self.float_constant.index != 0) {
+                    const swizzle: u8 = switch (component_index) {
+                        0 => 'x',
+                        1 => 'y',
+                        2 => 'z',
+                        3 => 'w',
+                        else => unreachable
+                    };
+
+                    try self.aliases.printLine(".alias {s} shared_const{}.{c}{c}{c}{c}", .{try value.getNameWithoutSwizzle(self.allocator.allocator()), self.float_constant.index, swizzle, swizzle, swizzle, swizzle});
+                }
             },
-            else => .{ 0, 0 },
-        };
-
-        if (constant_index[0] != 0) {
-            const swizzle: u8 = switch (constant_index[1]) {
-                0 => 'x',
-                1 => 'y',
-                2 => 'z',
-                3 => 'w',
-                else => unreachable
-            };
-
-            try self.aliases.printLine(".alias {s} shared_const{}.{c}{c}{c}{c}", .{try value.getNameWithoutSwizzle(self.allocator.allocator()), constant_index[0], swizzle, swizzle, swizzle, swizzle});
+            else => {},
         }
     }
 
@@ -793,20 +796,15 @@ pub const Builder = struct {
             },
             .radians => {
                 var arg_v = self.id_map.get(arguments[0]).?;
-                // TODO: move this into a utility function
                 if (!arg_v.canBeSrc2()) {
-                    const new_arg_v = try self.createTmpValue(arg_v.ty);
-                    try self.program_writer.addInstruction(.mov, INVALID_ID, .{try self.getValueName(&new_arg_v), try self.getValueName(&arg_v)});
-                    arg_v = new_arg_v;
+                    try self.createTmpValueFrom(&arg_v);
                 }
                 try self.program_writer.addInstruction(.mul, result, .{try self.getValueName(&value), "deg_to_rad", try self.getValueName(&arg_v)});
             },
             .degrees => {
                 var arg_v = self.id_map.get(arguments[0]).?;
                 if (!arg_v.canBeSrc2()) {
-                    const new_arg_v = try self.createTmpValue(arg_v.ty);
-                    try self.program_writer.addInstruction(.mov, INVALID_ID, .{try self.getValueName(&new_arg_v), try self.getValueName(&arg_v)});
-                    arg_v = new_arg_v;
+                    try self.createTmpValueFrom(&arg_v);
                 }
                 try self.program_writer.addInstruction(.mul, result, .{try self.getValueName(&value), "rad_to_deg", try self.getValueName(&arg_v)});
             },
@@ -850,8 +848,11 @@ pub const Builder = struct {
             .mix => {
                 var arg1_v = self.id_map.get(arguments[0]).?;
                 var arg2_v = self.id_map.get(arguments[1]).?;
-                const arg3_v = self.id_map.get(arguments[2]).?;
+                var arg3_v = self.id_map.get(arguments[2]).?;
                 _ = try self.swapIfNeeded(&arg1_v, &arg2_v);
+                if (!arg3_v.canBeSrc2()) {
+                    try self.createTmpValueFrom(&arg3_v);
+                }
                 const temp = try self.createTmpValue(type_v);
 
                 // value = arg1 * (1 - arg3)
