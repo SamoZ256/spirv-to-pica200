@@ -15,6 +15,9 @@ void main() {
     [[unroll]] for (int i = 0; i < N; i++) {
         z += u[i];
     }
+    for (float i = 0; i < N; i++) {
+        z += u[int(i)];
+    }
     z += log2(u[index]);
 
     for (float i = 0.0; i < 17.0f; i += 1.0f) {

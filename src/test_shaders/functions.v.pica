@@ -1,4 +1,5 @@
 .fvec uniform0
+.fvec uniform1[8]
 
 .constf shared_const0(0.0, 1.0, 0.0174532925, 57.295779513)
 .consti shared_const1(0, 1, 0, 0)
@@ -15,8 +16,8 @@
 .alias const16 shared_const3.xxxx
 .alias const45 shared_const3.yyyy
 .alias const55 shared_const3.zzzz
-.alias const63 shared_const3.wwww
-.alias const72 shared_const2.xxxx
+.alias const71 shared_const3.wwww
+.alias const79 shared_const2.xxxx
 
 .out outpos position
 
@@ -27,7 +28,7 @@ label51:
     mov r0.x, r15.x
     mov r0.y, r15.y
     mov r0.z, r15.z
-    mov r0.w, const63.x
+    mov r0.w, const71.x
     mov outpos, r0
 label5:
     mov r15.xyz, const46.xyz
@@ -55,9 +56,10 @@ label50:
     mov r2.z, v0.z
     add r3.xyz, r4.xyz, r2.xyz
     add r2.xyz, r3.xyz, -v0.xyz
-    mul r3.xyz, r2.xyz, r14.x
+    mova a0.x, r14.x
+    mul r3.xyz, uniform1[a0.x].x, r2.xyz
     add r15.xyz, r15.xyz, r3.xyz
-    add r14.x, const63.x, r14.x
+    add r14.x, const71.x, r14.x
     mov r0.x, f_ones.x
     cmp r0.x, eq, eq, r0.x
     jmpc cmp.x, label49

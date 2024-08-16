@@ -56,6 +56,20 @@ const ConstantDeclaration = struct {
 const REGISTER_COUNT: u8 = 16;
 const INVALID_ID = std.math.maxInt(u32);
 
+const OwnedRegister = struct {
+    owner: u32,
+
+    pub fn setOwner(self: *OwnedRegister, owner: u32) void {
+        self.owner = owner;
+    }
+
+    pub fn assertOwner(self: *OwnedRegister, name: []const u8, owner: u32) void {
+        if (self.owner != owner) {
+            std.debug.panic("{} needs to own {s}, but it is owned by {}\n", .{owner, name, self.owner});
+        }
+    }
+};
+
 pub const Builder = struct {
     allocator: std.heap.ArenaAllocator,
     buffer: [64 * 1024]u8,
@@ -81,7 +95,8 @@ pub const Builder = struct {
     registers_occupancy: [16]bool,
     temporary_registers: std.ArrayList(u8),
 
-    cmp_owner: u32,
+    cmp: OwnedRegister,
+    a0: OwnedRegister,
 
     pub fn init(allocator: std.mem.Allocator) !Builder {
         var self: Builder = undefined;
@@ -98,7 +113,6 @@ pub const Builder = struct {
         self.constant_counter = 2;
         self.registers_occupancy = [1]bool{false} ** 16;
         self.temporary_registers = std.ArrayList(u8).init(allocator);
-        self.cmp_owner = INVALID_ID;
 
         return self;
     }
@@ -291,16 +305,6 @@ pub const Builder = struct {
         try self.temporary_registers.append(register);
 
         return base.Value.init("r", register, ty);
-    }
-
-    fn setCmpOwner(self: *Builder, owner: u32) void {
-        self.cmp_owner = owner;
-    }
-
-    fn assertCmpOwner(self: *Builder, owner: u32) void {
-        if (self.cmp_owner != owner) {
-            std.debug.panic("{} needs to own cmp, but cmp is owned by {}\n", .{owner, self.cmp_owner});
-        }
     }
 
     // Decoration instructions
@@ -613,7 +617,7 @@ pub const Builder = struct {
     }
 
     pub fn createSelect(self: *Builder, result: u32, ty: u32, cond: u32, a: u32, b: u32) !void {
-        self.assertCmpOwner(cond);
+        self.cmp.assertOwner("cmp", cond);
 
         const type_v = self.type_map.get(ty).?;
 
@@ -723,11 +727,26 @@ pub const Builder = struct {
         try self.id_map.put(result, value);
 
         // Make the result the new cmp owner
-        self.setCmpOwner(result);
+        self.cmp.setOwner(result);
 
         const cmp_str = c_mode.toStr();
         //const cmp2_str = cmp_modes[1].toStr();
         try self.program_writer.addInstruction(.cmp, INVALID_ID, .{try self.getValueName(&lhs_v), cmp_str, cmp_str, try self.getValueName(&rhs_v)});
+    }
+
+    pub fn createFloatToInt(self: *Builder, result: u32, ty: u32, val: u32) !void {
+        const type_v = self.type_map.get(ty).?;
+
+        var val_v = self.id_map.get(val).?;
+
+        // TODO: assert that type_v doesn't have more than 2 components
+        const value = base.Value.init("a0", base.INVALID_REGISTER, type_v);
+        try self.id_map.put(result, value);
+
+        // Make the result the new a0 owner
+        self.a0.setOwner(result);
+
+        try self.program_writer.addInstruction(.mova, INVALID_ID, .{try self.getValueName(&value), try self.getValueName(&val_v)});
     }
 
     // TODO: optimize this
@@ -739,7 +758,7 @@ pub const Builder = struct {
     }
 
     pub fn createBranchConditional(self: *Builder, cond: u32, true_b: u32, false_b: u32) !void {
-        self.assertCmpOwner(cond);
+        self.cmp.assertOwner("cmp", cond);
 
         const cond_v = self.id_map.get(cond).?;
 

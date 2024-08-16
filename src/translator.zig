@@ -162,6 +162,8 @@ pub const Translator = struct {
             .OpFOrdLessThanEqual => self.pica200_builder.createCmp(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], .less_equal),
             .OpFOrdGreaterThan => self.pica200_builder.createCmp(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], .greater_than),
             .OpFOrdGreaterThanEqual => self.pica200_builder.createCmp(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], .greater_equal),
+            // TODO: OpConvertFToU as well?
+            .OpConvertFToS => self.pica200_builder.createFloatToInt(instruction.result_id, instruction.result_type_id, instruction.operands[0]),
             // Branches
             .OpBranch => self.pica200_builder.createBranch(instruction.operands[0]),
             .OpBranchConditional => self.pica200_builder.createBranchConditional(instruction.operands[0], instruction.operands[1], instruction.operands[2]),
