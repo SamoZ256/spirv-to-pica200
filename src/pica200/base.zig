@@ -38,6 +38,22 @@ pub const ComparisonMode = enum {
     }
 };
 
+pub const IntOperation = enum {
+    add,
+    subtract,
+    multiply,
+    divide,
+
+    pub fn toStr(self: IntOperation) u8 {
+        return switch (self) {
+            .add => '+',
+            .subtract => '-',
+            .multiply => '*',
+            .divide => '/',
+        };
+    }
+};
+
 pub const StdFunction = enum {
     round,
     round_even,

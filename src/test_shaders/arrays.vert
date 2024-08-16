@@ -16,7 +16,10 @@ void main() {
         z += u[i];
     }
     for (float i = 0; i < N; i++) {
-        z += u[int(i)];
+        z += u[int(i) + 2];
+        z += u[int(i) - 4];
+        z += u[int(i) * 8];
+        z += u[int(i) / 16];
     }
     z += log2(u[index]);
 

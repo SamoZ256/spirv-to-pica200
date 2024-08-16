@@ -3,8 +3,9 @@
 
 .constf shared_const0(0.0, 1.0, 0.0174532925, 57.295779513)
 .consti shared_const1(0, 1, 0, 0)
-.consti shared_const2(0, 1, 2, 3)
-.consti shared_const4(4, 5, 6, 7)
+.consti shared_const2(0, 8, 1, 2)
+.consti shared_const4(4, 16, 3, 5)
+.consti shared_const5(6, 7, 0, 0)
 .constf shared_const3(0e0, 8e0, 1e0, 1.7e1)
 
 .alias f_zeros shared_const0.xxxx
@@ -15,38 +16,40 @@
 .alias i_ones shared_const1.yyyy
 .alias const9 shared_const3.xxxx
 .alias const13 shared_const2.xxxx
-.alias const35 shared_const2.yyyy
+.alias const20 shared_const2.yyyy
+.alias const35 shared_const2.zzzz
 .alias const44 shared_const3.yyyy
-.alias const53 shared_const3.zzzz
-.alias const70 shared_const3.wwww
-.alias const181 shared_const2.zzzz
-.alias const182 shared_const2.wwww
-.alias const183 shared_const4.xxxx
-.alias const184 shared_const4.yyyy
-.alias const185 shared_const4.zzzz
-.alias const186 shared_const4.wwww
+.alias const48 shared_const2.wwww
+.alias const56 shared_const4.xxxx
+.alias const71 shared_const4.yyyy
+.alias const78 shared_const3.zzzz
+.alias const95 shared_const3.wwww
+.alias const207 shared_const4.zzzz
+.alias const208 shared_const4.wwww
+.alias const209 shared_const5.xxxx
+.alias const210 shared_const5.yyyy
 
 .out outpos position
 
 .entry func4
 
 .proc func4
-label66:
-    mov r0.x, v0.x
-    mov r0.y, v0.y
-    mov r0.z, r15.x
-    mov r0.w, const53.x
-    mov outpos, r0
+label90:
+    add r15.x, r15.x, r14.x
+    add r14.x, const78.x, r14.x
+    mov r0.x, f_ones.x
+    cmp r0.x, eq, eq, r0.x
+    jmpc cmp.x, label89
 label5:
     mov r14.x, const9.x
     mov r0.x, uniform1[const35.x].x
     add r1.x, uniform1[const13.x].x, r0.x
-    add r0.x, uniform1[const181.x].x, r1.x
-    add r1.x, uniform1[const182.x].x, r0.x
-    add r0.x, uniform1[const183.x].x, r1.x
-    add r1.x, uniform1[const184.x].x, r0.x
-    add r0.x, uniform1[const185.x].x, r1.x
-    add r15.x, uniform1[const186.x].x, r0.x
+    add r0.x, uniform1[const48.x].x, r1.x
+    add r1.x, uniform1[const207.x].x, r0.x
+    add r0.x, uniform1[const56.x].x, r1.x
+    add r1.x, uniform1[const208.x].x, r0.x
+    add r0.x, uniform1[const209.x].x, r1.x
+    add r15.x, uniform1[const210.x].x, r0.x
     mov r0.x, f_ones.x
     cmp r0.x, eq, eq, r0.x
     jmpc cmp.x, label38
@@ -56,27 +59,30 @@ label38:
     jmpc !cmp.x, label40
 label39:
     mova a0.x, r14.x
-    add r15.x, uniform1[a0.x].x, r15.x
-    add r14.x, const53.x, r14.x
+    add r2.x, uniform1[a0.x + const48.x.x].x, r15.x
+    add r3.x, uniform1[a0.x - const56.x.x].x, r2.x
+    add r2.x, uniform1[a0.x * const20.x.x].x, r3.x
+    add r15.x, uniform1[a0.x / const71.x.x].x, r2.x
+    add r14.x, const78.x, r14.x
     mov r0.x, f_ones.x
     cmp r0.x, eq, eq, r0.x
     jmpc cmp.x, label38
-label65:
-    add r15.x, r15.x, r14.x
-    add r14.x, const53.x, r14.x
-    mov r0.x, f_ones.x
-    cmp r0.x, eq, eq, r0.x
-    jmpc cmp.x, label64
 label40:
     mov r14.x, const9.x
     lg2 r0.x, uniform1[uniform0.x].x
     add r15.x, r15.x, r0.x
     mov r0.x, f_ones.x
     cmp r0.x, eq, eq, r0.x
-    jmpc cmp.x, label64
-label64:
-    cmp const70.x, ge, ge, r14.x
-    jmpc cmp.x, label65
-    jmpc !cmp.x, label66
+    jmpc cmp.x, label89
+label91:
+    mov r0.x, v0.x
+    mov r0.y, v0.y
+    mov r0.z, r15.x
+    mov r0.w, const78.x
+    mov outpos, r0
+label89:
+    cmp const95.x, ge, ge, r14.x
+    jmpc cmp.x, label90
+    jmpc !cmp.x, label91
 .end
 

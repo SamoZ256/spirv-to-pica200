@@ -150,6 +150,11 @@ pub const Translator = struct {
             .OpFSub => self.pica200_builder.createAdd(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], 1),
             .OpFMul, .OpVectorTimesScalar => self.pica200_builder.createMul(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], false),
             .OpFDiv => self.pica200_builder.createMul(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], true),
+            .OpIAdd => self.pica200_builder.createIntOperation(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], .add),
+            .OpISub => self.pica200_builder.createIntOperation(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], .subtract),
+            .OpIMul => self.pica200_builder.createIntOperation(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], .multiply),
+            // TODO: OpUDiv as well?
+            .OpSDiv => self.pica200_builder.createIntOperation(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1], .divide),
             // Matrix math
             .OpMatrixTimesMatrix => self.pica200_builder.createMatrixTimesMatrix(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1]),
             .OpMatrixTimesVector => self.pica200_builder.createMatrixTimesVector(instruction.result_id, instruction.result_type_id, instruction.operands[0], instruction.operands[1]),

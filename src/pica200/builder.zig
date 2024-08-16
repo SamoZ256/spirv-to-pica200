@@ -669,7 +669,6 @@ pub const Builder = struct {
 
         const negate1_str = if (neg == -1) "-" else "";
         const negate2_str = if (neg ==  1) "-" else "";
-        // TODO: check how many components the vector has
         try self.program_writer.addInstruction(.add, result, .{try self.getValueName(&value), try std.fmt.allocPrint(self.allocator.allocator(), "{s}{s}", .{negate1_str, try self.getValueName(&lhs_v)}), try std.fmt.allocPrint(self.allocator.allocator(), "{s}{s}", .{negate2_str, try self.getValueName(&rhs_v)})});
     }
 
@@ -693,6 +692,20 @@ pub const Builder = struct {
             rhs_v = new_rhs_v;
         }
         try self.program_writer.addInstruction(.mul, result, .{try self.getValueName(&value), try self.getValueName(&lhs_v), try self.getValueName(&rhs_v)});
+    }
+
+    // TODO: somwhow make sure that subsequent int operation aren't possible (or store to intermediate results?)
+    pub fn createIntOperation(self: *Builder, result: u32, ty: u32, lhs: u32, rhs: u32, op: base.IntOperation) !void {
+        const type_v = self.type_map.get(ty).?;
+
+        var lhs_v = self.id_map.get(lhs).?;
+        var rhs_v = self.id_map.get(rhs).?;
+        // TODO: is this even needed?
+        // We need to have the constant as src2 this time
+        _ = try self.swapIfNeeded(&rhs_v, &lhs_v);
+
+        const value = base.Value.init(try std.fmt.allocPrint(self.allocator.allocator(), "{s} {c} {s}", .{try self.getValueName(&lhs_v), op.toStr(), try self.getValueName(&rhs_v)}), base.INVALID_REGISTER, type_v);
+        try self.id_map.put(result, value);
     }
 
     pub fn createMatrixTimesMatrix(_: *Builder, _: u32, _: u32, _: u32, _: u32) !void {
