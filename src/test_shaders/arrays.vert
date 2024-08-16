@@ -4,18 +4,16 @@
 
 layout (location = 0) in vec2 a_position;
 
-const int N = 8;
-
 layout (location = 0) uniform int index;
-layout (location = 1) uniform float u[N];
+layout (location = 1) uniform float u[8];
 
 void main() {
     float z = 0.0;
     // The [[unroll]] attribute is necessary to unroll the loop
-    [[unroll]] for (int i = 0; i < N; i++) {
+    [[unroll]] for (int i = 0; i < 8; i++) {
         z += u[i];
     }
-    for (float i = 0; i < N; i++) {
+    for (float i = 0; i < 8; i++) {
         z += u[int(i) + 2];
         z += u[int(i) - 4];
         z += u[int(i) * 8];

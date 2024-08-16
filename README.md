@@ -148,8 +148,33 @@ label5:
 |---------|--------|
 | Fragment shaders | Not supported by PICA200 |
 | Geometry shaders | Not implemented |
-| bool, int, uint and their aggregate types | PICA200 supports these types, but it doesn't support arythmetic on them, and they are pretty useless |
 | double | Not supported by PICA200 |
 | Arrays as function variables | Will be supported by "unfolding" into multiple registers. Uniform arrays are already supported |
 | Textures, samplers and images | Not supported by PICA200 |
 | Point size, clip distance and cull distance | Not supported by PICA200 |
+
+### Integer limitations
+
+PICA200 doesn't support integer arithmetic the way SPIR-V handles it. It is supported onlt when indexing into and array. While this may seem like a really big limitation, integers don't have much more use cases than that. Though one common use case are for loops, and the limitation can be worked around in 2 ways:
+
+1. Forcing the loop to unroll
+
+This is probably the best solution, as loop unrolling generally leads to better performance. The `[[unroll]]` attribute is used to make sure the loop gets unrolled.
+
+```glsl
+[[unroll]] for (int i = 0; i < 8; i++) {
+    a += myArray[i + 1];
+}
+```
+
+2. Using a float loop counter
+
+When working with larger for loops, it may be a better idea to use a float loop counter to keep the code size smaller. The counter can then be casted to an integer when accessing the array.
+
+```glsl
+for (float i = 0.0; i < 8.0; i += 1.0) {
+    a += myArray[int(i) + 1];
+}
+```
+
+Notice that `1` is added to the index before accessing the array, which demonstrates integer arithmetic.
