@@ -261,14 +261,18 @@ pub const Builder = struct {
         }
     }
 
+    fn createTmpValueFrom(self: *Builder, value: *base.Value) !void {
+        var tmp = try self.createTmpValue(value.ty);
+        tmp.swizzle = value.swizzle;
+        try self.program_writer.addInstruction(.mov, INVALID_ID, .{try self.getValueName(&tmp), try self.getValueName(value)});
+        value.* = tmp;
+    }
+
     fn swapIfNeeded(self: *Builder, src1: *base.Value, src2: *base.Value) !bool {
         if (!src2.canBeSrc2()) {
             if (!src1.canBeSrc2()) {
                 // If neither can be src2, create a temporary register
-                var tmp = try self.createTempValue(src2.ty);
-                tmp.swizzle = src2.swizzle;
-                try self.program_writer.addInstruction(.mov, INVALID_ID, .{try self.getValueName(&tmp), try self.getValueName(src2)});
-                src2.* = tmp;
+                try self.createTmpValueFrom(src2);
 
                 return false;
             }
@@ -282,7 +286,7 @@ pub const Builder = struct {
         return false;
     }
 
-    fn createTempValue(self: *Builder, ty: base.Type) !base.Value {
+    fn createTmpValue(self: *Builder, ty: base.Type) !base.Value {
         const register = self.getAvailableRegister(false);
         try self.temporary_registers.append(register);
 
@@ -665,7 +669,7 @@ pub const Builder = struct {
         const value = try self.getResultV(result, &type_v, false);
 
         if (invert) {
-            var new_rhs_v = try self.createTempValue(type_v);
+            var new_rhs_v = try self.createTmpValue(type_v);
             // TODO: check how many components
             for (0..4) |i| {
                 const index_v = try self.indexToValue(@intCast(i), false);
@@ -717,7 +721,9 @@ pub const Builder = struct {
 
     // TODO: optimize this
     pub fn createBranch(self: *Builder, b: u32) !void {
-        try self.program_writer.addInstruction(.cmp, INVALID_ID, .{"i_ones.x", "eq", "eq", "i_ones.x"});
+        const tmp = try self.createTmpValue(.{ .id = INVALID_ID, .ty = .{ .float = {} } });
+        try self.program_writer.addInstruction(.mov, INVALID_ID, .{try self.getValueName(&tmp), "f_ones.x"});
+        try self.program_writer.addInstruction(.cmp, INVALID_ID, .{try self.getValueName(&tmp), "eq", "eq", try self.getValueName(&tmp)});
         try self.program_writer.addInstruction(.jmpc, INVALID_ID, .{"cmp.x", try std.fmt.allocPrint(self.allocator.allocator(), "label{}", .{b})});
     }
 
@@ -746,7 +752,7 @@ pub const Builder = struct {
                 var arg_v = self.id_map.get(arguments[0]).?;
                 // TODO: move this into a utility function
                 if (!arg_v.canBeSrc2()) {
-                    const new_arg_v = try self.createTempValue(arg_v.ty);
+                    const new_arg_v = try self.createTmpValue(arg_v.ty);
                     try self.program_writer.addInstruction(.mov, INVALID_ID, .{try self.getValueName(&new_arg_v), try self.getValueName(&arg_v)});
                     arg_v = new_arg_v;
                 }
@@ -755,7 +761,7 @@ pub const Builder = struct {
             .degrees => {
                 var arg_v = self.id_map.get(arguments[0]).?;
                 if (!arg_v.canBeSrc2()) {
-                    const new_arg_v = try self.createTempValue(arg_v.ty);
+                    const new_arg_v = try self.createTmpValue(arg_v.ty);
                     try self.program_writer.addInstruction(.mov, INVALID_ID, .{try self.getValueName(&new_arg_v), try self.getValueName(&arg_v)});
                     arg_v = new_arg_v;
                 }
@@ -803,7 +809,7 @@ pub const Builder = struct {
                 var arg2_v = self.id_map.get(arguments[1]).?;
                 const arg3_v = self.id_map.get(arguments[2]).?;
                 _ = try self.swapIfNeeded(&arg1_v, &arg2_v);
-                const temp = try self.createTempValue(type_v);
+                const temp = try self.createTmpValue(type_v);
 
                 // value = arg1 * (1 - arg3)
                 try self.program_writer.addInstruction(.add, INVALID_ID, .{try self.getValueName(&temp), "f_ones", try std.fmt.allocPrint(self.allocator.allocator(), "-{s}", .{try self.getValueName(&arg3_v)})});

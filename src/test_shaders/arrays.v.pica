@@ -40,12 +40,14 @@ label5:
     add r1.x, uniform1[const167.x].x, r0.x
     lg2 r0.x, uniform1[uniform0.x].x
     add r15.x, r1.x, r0.x
-    cmp i_ones.x, eq, eq, i_ones.x
+    mov r0.x, f_ones.x
+    cmp r0.x, eq, eq, r0.x
     jmpc cmp.x, label46
 label47:
     add r15.x, r15.x, r14.x
     add r14.x, const57.x, r14.x
-    cmp i_ones.x, eq, eq, i_ones.x
+    mov r0.x, f_ones.x
+    cmp r0.x, eq, eq, r0.x
     jmpc cmp.x, label46
 label48:
     mov r0.x, v0.x
