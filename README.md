@@ -178,3 +178,7 @@ for (float i = 0.0; i < 8.0; i += 1.0) {
 ```
 
 Notice that `1` is added to the index before accessing the array, which demonstrates integer arithmetic.
+
+## License
+
+Distributed under the MIT License. See `LICENSE.txt` for more information.
