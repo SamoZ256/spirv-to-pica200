@@ -114,6 +114,8 @@ pub const Translator = struct {
 
     fn translateInstruction(self: *Translator, instruction: *const spirv.reader.Instruction) !void {
         try switch (instruction.opcode) {
+            // Header
+            .OpEntryPoint => self.pica200_builder.createEntryPoint(instruction.operands[1]),
             // Decorations
             .OpDecorate => self.pica200_builder.createDecoration(instruction.operands[0], toPica200Decoration(instruction.operands[1..])),
             .OpMemberDecorate => self.pica200_builder.createMemberDecoration(instruction.operands[0], instruction.operands[1], toPica200Decoration(instruction.operands[2..])),
@@ -128,14 +130,12 @@ pub const Translator = struct {
             .OpTypeStruct => self.pica200_builder.createStructType(instruction.result_id, instruction.operands),
             .OpTypePointer => self.pica200_builder.createPointerType(instruction.result_id, instruction.operands[1]),
             // Instructions
-            .OpNop => self.pica200_builder.createNop(),
-            // TODO: don't ignore these
-            .OpFunction => {},
-            .OpFunctionEnd => {},
+            .OpFunction => self.pica200_builder.createFunction(instruction.result_id),
             .OpLabel => self.pica200_builder.createLabel(instruction.result_id),
             .OpConstant => self.pica200_builder.createConstant(instruction.result_id, instruction.result_type_id, instruction.operands[0]),
             .OpConstantComposite => self.pica200_builder.createConstantComposite(instruction.result_id, instruction.result_type_id, instruction.operands),
             .OpVariable => self.pica200_builder.createVariable(instruction.result_id, instruction.result_type_id, toPica200StorageClass(@enumFromInt(instruction.operands[0]))),
+            .OpNop => self.pica200_builder.createNop(),
             .OpLoad => self.pica200_builder.createLoad(instruction.result_id, instruction.operands[0]),
             .OpStore => self.pica200_builder.createStore(instruction.operands[0], instruction.operands[1]),
             .OpCompositeExtract => self.pica200_builder.createAccessChain(instruction.result_id, instruction.operands[0], instruction.operands[1..instruction.operands.len], false),
@@ -171,8 +171,9 @@ pub const Translator = struct {
             .OpCapability => {},
             .OpExtInstImport => {},
             .OpMemoryModel => {},
-            .OpEntryPoint => {},
             .OpSource => {},
+            .OpFunctionEnd => {},
+            // TODO: don't ignore this
             .OpReturn => {},
             .OpTypeFunction => {},
             // TODO: don't ignore this?

@@ -224,20 +224,23 @@ pub const Block = struct {
     }
 };
 
-pub const ProgramWriter = struct {
+pub const Function = struct {
     allocator: std.mem.Allocator,
+    id: u32,
     blocks: std.AutoHashMap(u32, Block),
     active_block: u32,
 
-    pub fn init(allocator: std.mem.Allocator) ProgramWriter {
-        var self: ProgramWriter = undefined;
+    pub fn init(allocator: std.mem.Allocator, id: u32) Function {
+        var self: Function = undefined;
         self.allocator = allocator;
+        self.id = id;
         self.blocks = std.AutoHashMap(u32, Block).init(allocator);
+        self.active_block = 0;
 
         return self;
     }
 
-    pub fn deinit(self: *ProgramWriter) void {
+    pub fn deinit(self: *Function) void {
         var it = self.blocks.iterator();
         while (it.next()) |i| {
             i.value_ptr.deinit();
@@ -245,8 +248,8 @@ pub const ProgramWriter = struct {
         self.blocks.deinit();
     }
 
-    pub fn write(self: *const ProgramWriter, w: *writer.Writer) !void {
-        try w.printLine(".proc main", .{});
+    pub fn write(self: *const Function, w: *writer.Writer) !void {
+        try w.printLine(".proc func{}", .{self.id});
         var it = self.blocks.iterator();
         while (it.next()) |i| {
             try i.value_ptr.write(w);
@@ -254,7 +257,7 @@ pub const ProgramWriter = struct {
         try w.printLine(".end", .{});
     }
 
-    pub fn getBlock(self: *ProgramWriter, id: u32) !*Block {
+    pub fn getBlock(self: *Function, id: u32) !*Block {
         const result = try self.blocks.getOrPut(id);
         if (!result.found_existing) {
             result.value_ptr.* = Block.init(self.allocator, id);
@@ -263,7 +266,54 @@ pub const ProgramWriter = struct {
         return result.value_ptr;
     }
 
-    pub fn addInstruction(self: *ProgramWriter, opcode: Opcode, result: u32, operands: anytype) !void {
+    pub fn addInstruction(self: *Function, opcode: Opcode, result: u32, operands: anytype) !void {
         try self.blocks.getPtr(self.active_block).?.addInstruction(opcode, result, operands);
+    }
+};
+
+pub const ProgramWriter = struct {
+    allocator: std.mem.Allocator,
+    functions: std.AutoHashMap(u32, Function),
+    active_function: u32,
+
+    pub fn init(allocator: std.mem.Allocator) ProgramWriter {
+        var self: ProgramWriter = undefined;
+        self.allocator = allocator;
+        self.functions = std.AutoHashMap(u32, Function).init(allocator);
+        self.active_function = 0;
+
+        return self;
+    }
+
+    pub fn deinit(self: *ProgramWriter) void {
+        var it = self.functions.iterator();
+        while (it.next()) |i| {
+            i.value_ptr.deinit();
+        }
+        self.functions.deinit();
+    }
+
+    pub fn write(self: *const ProgramWriter, w: *writer.Writer) !void {
+        var it = self.functions.iterator();
+        while (it.next()) |i| {
+            try i.value_ptr.write(w);
+        }
+    }
+
+    pub fn getFunction(self: *ProgramWriter, id: u32) !*Function {
+        const result = try self.functions.getOrPut(id);
+        if (!result.found_existing) {
+            result.value_ptr.* = Function.init(self.allocator, id);
+        }
+
+        return result.value_ptr;
+    }
+
+    pub fn getActiveFunction(self: *ProgramWriter) ?*Function {
+        return self.functions.getPtr(self.active_function);
+    }
+
+    pub fn addInstruction(self: *ProgramWriter, opcode: Opcode, result: u32, operands: anytype) !void {
+        try self.functions.getPtr(self.active_function).?.addInstruction(opcode, result, operands);
     }
 };

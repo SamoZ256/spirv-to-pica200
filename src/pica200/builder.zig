@@ -383,9 +383,20 @@ pub const Builder = struct {
     }
 
     // Instructions
-    pub fn createLabel(self: *Builder, id: u32) !void {
-        _ = try self.program_writer.getBlock(id);
-        self.program_writer.active_block = id;
+    // TODO: take execution model as an argument
+    pub fn createEntryPoint(self: *Builder, entry_point: u32) !void {
+        try self.body.printLine(".entry func{}\n", .{entry_point});
+    }
+
+    pub fn createFunction(self: *Builder, result: u32) !void {
+        _ = try self.program_writer.getFunction(result);
+        self.program_writer.active_function = result;
+    }
+
+    pub fn createLabel(self: *Builder, result: u32) !void {
+        const function = self.program_writer.getActiveFunction().?;
+        _ = try function.getBlock(result);
+        function.active_block = result;
     }
 
     pub fn createConstant(self: *Builder, result: u32, ty: u32, val: u32) !void {
@@ -633,7 +644,7 @@ pub const Builder = struct {
             const var_id = operands[i * 2];
             const block_id = operands[i * 2 + 1];
             const var_v = try self.getValue(var_id, &type_v);
-            const block = try self.program_writer.getBlock(block_id);
+            const block = try self.program_writer.getActiveFunction().?.getBlock(block_id);
 
             try block.addValueExport(result, var_id, try self.getValueName(&value), try self.getValueName(&var_v));
         }

@@ -57,6 +57,10 @@ fn compileShader(allocator: std.mem.Allocator, source_filename: []const u8, outp
     }
 }
 
+fn compileTestShader(allocator: std.mem.Allocator, comptime test_name: []const u8, assembly: bool) !void {
+    try compileShader(allocator, "src/test_shaders/" ++ test_name ++ ".spv", "src/test_shaders/" ++ test_name ++ ".v.pica", "src/test_shaders/" ++ test_name ++ ".shbin", assembly);
+}
+
 pub fn main() !void {
     // Allocator
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -86,17 +90,19 @@ pub fn main() !void {
         return clap.help(std.io.getStdErr().writer(), clap.Help, &params, .{});
     }
 
+    const assembly = (res.args.assembly != 0);
     if (res.args.@"test-shaders" != 0) {
-        try compileShader(allocator, "src/test_shaders/simple.spv", "src/test_shaders/simple.v.pica", "src/test_shaders/simple.shbin", res.args.assembly != 0);
-        try compileShader(allocator, "src/test_shaders/math.spv", "src/test_shaders/math.v.pica", "src/test_shaders/math.shbin", res.args.assembly != 0);
-        try compileShader(allocator, "src/test_shaders/control_flow.spv", "src/test_shaders/control_flow.v.pica", "src/test_shaders/control_flow.shbin", res.args.assembly != 0);
-        try compileShader(allocator, "src/test_shaders/arrays.spv", "src/test_shaders/arrays.v.pica", "src/test_shaders/arrays.shbin", res.args.assembly != 0);
-        try compileShader(allocator, "src/test_shaders/std.spv", "src/test_shaders/std.v.pica", "src/test_shaders/std.shbin", res.args.assembly != 0);
-        try compileShader(allocator, "src/test_shaders/matrices.spv", "src/test_shaders/matrices.v.pica", "src/test_shaders/matrices.shbin", res.args.assembly != 0);
+        try compileTestShader(allocator, "simple", assembly);
+        try compileTestShader(allocator, "math", assembly);
+        try compileTestShader(allocator, "control_flow", assembly);
+        try compileTestShader(allocator, "arrays", assembly);
+        try compileTestShader(allocator, "std", assembly);
+        try compileTestShader(allocator, "matrices", assembly);
+        try compileTestShader(allocator, "functions", assembly);
     } else {
         var output1_filename = res.args.output.?;
         var output2_filename = res.args.output.?;
-        if (res.args.assembly != 0) {
+        if (assembly) {
             output2_filename = "";
         } else {
             output1_filename = ".temp/temp.v.pica";
@@ -109,7 +115,7 @@ pub fn main() !void {
                 }
             };
         }
-        try compileShader(allocator, res.positionals[0], output1_filename, output2_filename, res.args.assembly != 0);
+        try compileShader(allocator, res.positionals[0], output1_filename, output2_filename, assembly);
 
         if (res.args.assembly == 0) {
             // Delete the temporary file

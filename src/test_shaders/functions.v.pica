@@ -1,0 +1,69 @@
+.fvec uniform0
+
+.constf shared_const0(0.0, 1.0, 0.0174532925, 57.295779513)
+.consti shared_const1(0, 1, 0, 0)
+.constf const46(0e0, 0e0, 0e0, 0e0)
+.consti shared_const2(0, 0, 0, 0)
+.constf shared_const3(5.8475906e4, 0e0, 8e0, 1e0)
+
+.alias f_zeros shared_const0.xxxx
+.alias f_ones shared_const0.yyyy
+.alias deg_to_rad shared_const0.zzzz
+.alias rad_to_deg shared_const0.wwww
+.alias i_zeros shared_const1.xxxx
+.alias i_ones shared_const1.yyyy
+.alias const16 shared_const3.xxxx
+.alias const45 shared_const3.yyyy
+.alias const55 shared_const3.zzzz
+.alias const63 shared_const3.wwww
+.alias const72 shared_const2.xxxx
+
+.out outpos position
+
+.entry func4
+
+.proc func4
+label51:
+    mov r0.x, r15.x
+    mov r0.y, r15.y
+    mov r0.z, r15.z
+    mov r0.w, const63.x
+    mov outpos, r0
+label5:
+    mov r15.xyz, const46.xyz
+    mov r14.x, const45.x
+    mov r0.x, f_ones.x
+    cmp r0.x, eq, eq, r0.x
+    jmpc cmp.x, label49
+label50:
+    mov r2.x, const16.x
+    mul r3.x, uniform0.x, r2.x
+    add r2.x, r3.x, v0.x
+    mov r3.x, r2.x
+    mov r3.y, r2.x
+    mov r3.z, r2.x
+    mov r2.x, v0.y
+    mov r2.y, v0.y
+    mov r2.z, v0.y
+    rcp r5.x, r2.xyz
+    rcp r5.y, r2.xyz
+    rcp r5.z, r2.xyz
+    rcp r5, r2.xyz
+    mul r4.xyz, r3.xyz, r5.xyz
+    mov r2.x, v0.z
+    mov r2.y, v0.z
+    mov r2.z, v0.z
+    add r3.xyz, r4.xyz, r2.xyz
+    add r2.xyz, r3.xyz, -v0.xyz
+    mul r3.xyz, r2.xyz, r14.x
+    add r15.xyz, r15.xyz, r3.xyz
+    add r14.x, const63.x, r14.x
+    mov r0.x, f_ones.x
+    cmp r0.x, eq, eq, r0.x
+    jmpc cmp.x, label49
+label49:
+    cmp const55.x, ge, ge, r14.x
+    jmpc cmp.x, label50
+    jmpc !cmp.x, label51
+.end
+

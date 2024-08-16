@@ -27,7 +27,9 @@
 
 .out outpos position
 
-.proc main
+.entry func4
+
+.proc func4
 label5:
     mov r14.x, const9.x
     mov r0.x, uniform1[const35.x].x

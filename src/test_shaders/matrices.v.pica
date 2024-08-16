@@ -16,7 +16,9 @@
 
 .out outpos position
 
-.proc main
+.entry func4
+
+.proc func4
 label5:
     mov r0.x, v0.x
     mov r0.y, v0.y
